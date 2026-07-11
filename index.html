@@ -113,6 +113,11 @@ body.menuMode{padding-bottom:0}
 .mitem .mname{font-family:var(--serif);font-size:23px;color:var(--ink)}
 .mitem .mdesc{font-family:var(--serif);font-style:italic;font-size:14.5px;color:var(--mut);margin-top:4px}
 .mitem .housestar{margin-right:6px}
+.mcat{font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--brass2);margin:20px 0 12px}
+.prow{display:flex;align-items:baseline;gap:8px;max-width:400px;margin:0 auto 10px;text-align:left}
+.prow .pn{font-family:var(--serif);font-size:17px}
+.prow .dots{flex:1;border-bottom:1px dotted var(--brassdim);transform:translateY(-4px);min-width:24px}
+.prow .pt{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--mut)}
 #menu-empty{color:var(--dim);font-family:var(--serif);font-style:italic;margin-top:60px}
 /* modal */
 #modalwrap{position:fixed;inset:0;z-index:20;display:none;background:rgba(10,7,5,.7);align-items:flex-end;justify-content:center}
@@ -380,12 +385,20 @@ function reqStatus(req){
   const low = ok && !matches.some(m => m.level === 'full'); // only low bottles can satisfy it
   return { ok, low, kind:'tag', key:'tag:'+tagKey(tag), label: tagLabel(tag) };
 }
-// -> { makeable, low, missing:[{req,status}] }
+// Only bottles of alcohol gate a recipe. Staples, mixers, and household
+// ingredients (seasonal coquito spices, sodas…) never block or get flagged.
+const GATING_CATS = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine'];
+function reqGates(req){
+  if(req.bottleId) return true;
+  if(req.tag) return GATING_CATS.includes(norm(req.tag.category));
+  return false; // staples never gate
+}
+// -> { makeable, low, missing:[{req,status}] } — missing holds gating reqs only
 function recipeStatus(r){
   const missing = []; let low = false;
   for(const ing of r.ingredients){
     const st = reqStatus(ing.req);
-    if(!st.ok) missing.push({ req: ing.req, status: st });
+    if(!st.ok){ if(reqGates(ing.req)) missing.push({ req: ing.req, status: st }); }
     else if(st.low) low = true;
   }
   return { makeable: missing.length === 0, low: missing.length === 0 && low, missing };
@@ -741,7 +754,7 @@ function menuPayload(){
   return {
     t: S.menuTitle,
     c: items.map(r => ({ n:r.name, d:autoDesc(r) || (r.notes||'').trim(), h:!!r.house })),
-    s: pours.map(b => ({ n:b.name, d:tagLabel({ category:b.category, subtype:b.subtype||undefined }) })),
+    s: pours.map(b => ({ n:b.name, c:b.category, t:norm(b.subtype||'') })),
   };
 }
 function renderMenu(){
@@ -758,7 +771,17 @@ function renderMenu(){
   }
   if(p.s.length){
     html.push('<div class="msec">&mdash; by the pour &mdash;</div>');
-    for(const b of p.s) html.push('<div class="mitem pour"><div class="mname">', esc(b.n), '</div><div class="mdesc">', esc(b.d), '</div></div>');
+    const byCat = {};
+    for(const b of p.s) (byCat[b.c || ''] = byCat[b.c || ''] || []).push(b);
+    const order = POUR_CATS.filter(c => byCat[c]).concat(byCat[''] ? [''] : []);
+    for(const cat of order){
+      if(cat) html.push('<div class="mcat">', esc(cat), '</div>');
+      for(const b of byCat[cat]){
+        html.push('<div class="prow pour"><span class="pn">', esc(b.n), '</span>',
+          b.t ? '<span class="dots"></span><span class="pt">' + esc(b.t) + '</span>' : '',
+          '</div>');
+      }
+    }
   }
   document.getElementById('menu-body').innerHTML = html.join('');
 }
@@ -846,9 +869,10 @@ function openRecipeDetail(id){
   const missKeys = new Set(st.missing.map(m => m.status.key));
   const ingHtml = r.ingredients.map(ing => {
     const s = reqStatus(ing.req);
-    return '<div class="ing-line' + (s.ok ? '' : ' miss') + '"><span class="qty">' + esc(ing.qty||'') + ' ' + esc(ing.unit||'') + '</span>' +
+    const flag = reqGates(ing.req) && !s.ok; // only alcohol bottles get called out
+    return '<div class="ing-line' + (flag ? ' miss' : '') + '"><span class="qty">' + esc(ing.qty||'') + ' ' + esc(ing.unit||'') + '</span>' +
       '<span class="lbl">' + esc(ingLabel(ing)) + (ing.note ? ' <span class="dim small">(' + esc(ing.note) + ')</span>' : '') +
-      (s.ok ? (s.low ? ' <span class="lowtag">low</span>' : '') : ' <span class="small" style="color:var(--bad)">missing</span>') + '</span></div>';
+      (flag ? ' <span class="small" style="color:var(--bad)">missing</span>' : (s.ok && s.low ? ' <span class="lowtag">low</span>' : '')) + '</span></div>';
   }).join('');
   openModal('<button class="mclose" onclick="closeModal()">&times;</button>' +
     '<h2>' + (r.house?'<span class="housestar">★</span> ':'') + esc(r.name) + '</h2>' +
@@ -889,8 +913,11 @@ function ingRowHtml(ing){
 }
 function ingBodyHtml(kind, req, cat){
   if(kind === 'staple'){
-    const v = req.staple || S.staples[0] || '';
-    return '<select class="ir-staple">' + S.staples.map(s => '<option' + (norm(s)===norm(v)?' selected':'') + '>' + esc(s) + '</option>').join('') + '</select>';
+    // free-type: seasonal/household ingredients don't have to live in the staples list
+    const v = req.staple || '';
+    const listId = 'dl-st-' + Math.random().toString(36).slice(2,7);
+    return '<span style="flex:1"><input class="ir-staple" list="' + listId + '" placeholder="lime, cinnamon, condensed milk…" value="' + esc(v) + '">' +
+      '<datalist id="' + listId + '">' + S.staples.map(s => '<option value="' + esc(s) + '">').join('') + '</datalist></span>';
   }
   if(kind === 'bottleId'){
     if(!S.bottles.length) return '<div class="dim small" style="padding:8px 2px">No bottles on the shelf yet.</div>';
@@ -948,7 +975,7 @@ function openRecipeForm(id, pre){
     ings.querySelectorAll('.ingrow').forEach(row => {
       const kind = row.querySelector('.ir-kind').value;
       let req = null;
-      if(kind === 'staple'){ const el = row.querySelector('.ir-staple'); if(el) req = { staple: el.value }; }
+      if(kind === 'staple'){ const el = row.querySelector('.ir-staple'); if(el && el.value.trim()) req = { staple: el.value.trim() }; }
       else if(kind === 'bottleId'){ const el = row.querySelector('.ir-bottle'); if(el) req = { bottleId: el.value }; }
       else {
         const cat = row.querySelector('.ir-cat').value, sub = row.querySelector('.ir-sub').value.trim();
@@ -970,7 +997,7 @@ function openRecipeForm(id, pre){
 function openSettings(){
   openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>Settings</h2>' +
     '<label class="fieldlbl">Menu title <span class="dim">(shown in guest Menu mode)</span></label><input id="st-title" value="' + esc(S.menuTitle) + '">' +
-    '<label class="fieldlbl">Staples <span class="dim">(always in the house — comma separated)</span></label>' +
+    '<label class="fieldlbl">Staples <span class="dim">(household ingredients suggested in recipe forms — comma separated)</span></label>' +
     '<textarea id="st-staples" rows="3">' + esc(S.staples.join(', ')) + '</textarea>' +
     '<hr class="sep"><h3 class="serif" style="color:var(--brass2)">Backup</h3>' +
     '<div class="small mut" style="margin:4px 0 10px">Your bar lives only in this browser — export a backup now and then.</div>' +

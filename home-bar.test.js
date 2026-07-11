@@ -66,11 +66,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Old Fashioned")).makeable')===true, 'Old Fashioned makeable with bourbon+bitters');
   assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Gimlet")).makeable')===true, 'Gimlet makeable with gin+staples');
 
-  // --- missing staple is NOT an unlock ---
+  // --- only alcohol gates: staples/mixers/household never block or flag ---
   w.eval('S.staples = S.staples.filter(s=>s!=="lime"); renderAll();');
-  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Gimlet")).makeable')===false, 'removing lime staple breaks the Gimlet');
-  assert(!JSON.parse(w.eval('JSON.stringify(unlockGroups())')).some(g=>g.key==='staple:lime'), 'a missing staple never appears in unlocks');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Gimlet")).makeable')===true, 'a household staple never blocks a recipe');
   w.eval('S.staples.push("lime"); save(); renderAll();');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Ranch Water")).makeable')===true, 'a missing mixer (soda water) never blocks a recipe');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Margarita")).makeable')===false, 'a missing alcohol bottle (orange liqueur) still blocks');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Margarita")).missing.every(m=>m.status.kind!=="staple")'), 'missing list holds gating reqs only');
+  assert(!JSON.parse(w.eval('JSON.stringify(unlockGroups())')).some(g=>g.key.startsWith('staple:')||g.key.startsWith('tag:mixer')), 'unlocks only ever suggest alcohol bottles');
 
   // --- low-warning state ---
   const ginId = w.eval('S.bottles.find(b=>b.name==="Sipsmith").id');
@@ -165,13 +168,17 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const makeableNames = JSON.parse(w.eval('JSON.stringify(S.recipes.filter(r=>recipeStatus(r).makeable).map(r=>r.name))'));
   assert(menuNames.length===makeableNames.length && menuNames.every(n=>makeableNames.some(m=>n.includes(m))), 'menu cocktails section lists exactly the makeable recipes');
 
-  // sections: cocktails + by the pour
+  // sections: cocktails + by the pour, grouped like a printed menu
   assert(d.querySelectorAll('#menu-body .msec').length===2, 'menu has cocktails and by-the-pour sections');
-  const pourNames = [...d.querySelectorAll('#menu-body .mitem.pour .mname')].map(e=>e.textContent);
+  const pourNames = [...d.querySelectorAll('#menu-body .prow .pn')].map(e=>e.textContent);
   assert(pourNames.length===5 && pourNames.includes('Sipsmith'), 'pour section lists the 5 stocked spirits & amari');
+  const pourCats = [...d.querySelectorAll('#menu-body .mcat')].map(e=>e.textContent);
+  assert(pourCats.join()==='tequila,whiskey,gin,amaro', 'pours grouped under liquor-category headers in order');
+  const mijRow = [...d.querySelectorAll('#menu-body .prow')].find(r=>r.querySelector('.pn').textContent==='Mijenta Reposado');
+  assert(mijRow && mijRow.querySelector('.pt').textContent==='reposado' && mijRow.querySelector('.dots')!==null, 'pour row reads name ..... subtype');
   assert(!pourNames.includes('Fever-Tree Ginger Beer') && !pourNames.includes('Angostura'), 'mixers and bitters stay off the pour list');
   w.eval('S.bottles.find(b=>b.name==="Mijenta Reposado").level="out"; renderMenu();'); await sleep(20);
-  assert(![...d.querySelectorAll('#menu-body .mitem.pour .mname')].some(e=>e.textContent==='Mijenta Reposado'), 'an out bottle leaves the pour list');
+  assert(![...d.querySelectorAll('#menu-body .prow .pn')].some(e=>e.textContent==='Mijenta Reposado'), 'an out bottle leaves the pour list');
   w.eval('S.bottles.find(b=>b.name==="Mijenta Reposado").level="full"; renderMenu();'); await sleep(20);
 
   // shareable menu link (payload rides in the #hash)

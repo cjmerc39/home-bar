@@ -165,8 +165,10 @@ const RECIPE_SCHEMA = {
 
 function recipePrompt(staples) {
   return 'Turn the given cocktail (described in text, or photographed from a book/card) into ONE structured recipe. ' +
-    'Ingredient rules: anything on this household staples list must be kind:"staple" with the exact matching staple string: [' +
-    staples.join(', ') + ']. Everything that comes out of a bottle is kind:"tag" with a category from the allowed list and, ' +
+    'Ingredient rules: any household or pantry ingredient (citrus, syrup, spice, dairy, eggs, coffee, coconut milk, etc.) ' +
+    'is kind:"staple" with a short lowercase name — use the exact string from this list when one matches: [' +
+    staples.join(', ') + '], otherwise invent a sensible short name (e.g. "cinnamon", "condensed milk"). ' +
+    'Everything alcoholic or bottled from a store is kind:"tag" with a category from the allowed list and, ' +
     'when meaningful, a lowercase subtype following these conventions: ' + SUBTYPE_CONVENTIONS + ' ' +
     'qty is a plain decimal string like "0.75". Keep glass and garnish short. Put technique tips in notes. ' +
     'If the source names a specific brand, put the generic tag in the ingredient and mention the brand in notes.';
