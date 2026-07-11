@@ -236,6 +236,22 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('S.menuSelection===null'), 'everything-makeable resets to automatic');
   assert([...d.querySelectorAll('#menu-body .mitem:not(.pour) .mname')].some(e=>e.textContent.includes('Gimlet')), 'menu shows all makeable again');
 
+  // pour curation
+  w.eval('openMenuPicker()'); await sleep(20);
+  assert(d.querySelectorAll('#modal .mp-pk').length===5, 'menu picker also lists the 5 stocked pours');
+  const sipPk = [...d.querySelectorAll('#modal .mp-pk')].find(el=>el.closest('label').textContent.includes('Sipsmith'));
+  sipPk.checked = false;
+  d.getElementById('mp-save').click(); await sleep(20);
+  assert(w.eval('Array.isArray(S.pourSelection)') && w.eval('S.pourSelection.length')===4, 'partial pour selection is saved');
+  assert(![...d.querySelectorAll('#menu-body .prow .pn')].some(e=>e.textContent==='Sipsmith'), 'unchecked pour leaves the menu');
+  assert([...d.querySelectorAll('#menu-body .mitem:not(.pour) .mname')].some(e=>e.textContent.includes('Gimlet')), 'hiding a pour does not touch the cocktails');
+  const pourLink = w.eval('buildMenuLink()');
+  const pourPayload = JSON.parse(w.eval('JSON.stringify(parseMenuHash('+JSON.stringify('#m=')+' + '+JSON.stringify(pourLink.split('#m=')[1])+'))'));
+  assert(!pourPayload.s.some(x=>x.n==='Sipsmith'), 'shared link respects the pour curation');
+  w.eval('openMenuPicker()'); await sleep(20);
+  d.getElementById('mp-all').click(); await sleep(20);
+  assert(w.eval('S.pourSelection===null') && [...d.querySelectorAll('#menu-body .prow .pn')].some(e=>e.textContent==='Sipsmith'), 'show-everything restores all pours');
+
   assert(d.querySelectorAll('#view-menu button').length===3, 'admin menu chrome is just curate + share + exit');
   d.getElementById('menu-exit').click(); await sleep(20);
   assert(!d.body.classList.contains('menuMode'), 'menu exit returns to admin');

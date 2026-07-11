@@ -109,7 +109,8 @@ body.menuMode{padding-bottom:0}
 .wph{width:54px;height:54px;border-radius:8px;border:1px dashed var(--brassdim);display:flex;align-items:center;justify-content:center;color:var(--brassdim);flex:none;font-size:20px}
 .wish{cursor:pointer}
 .wname{font-weight:600}
-.msec{font-size:11px;letter-spacing:3.5px;text-transform:uppercase;color:var(--dim);margin:34px 0 18px}
+.msec{display:flex;align-items:center;gap:14px;max-width:420px;margin:48px auto 24px;color:var(--brass2);font-family:var(--serif);font-size:14px;letter-spacing:4px;text-transform:uppercase}
+.msec::before,.msec::after{content:'';flex:1;border-top:1px solid var(--brassdim);opacity:.6}
 .aibox{background:var(--bg3);border:1px dashed var(--brassdim);border-radius:10px;padding:10px;margin:10px 0 2px}
 .aibox .ttl{color:var(--brass2);font-size:13px;letter-spacing:.6px;margin-bottom:6px}
 .menu-head{font-family:var(--serif);font-size:38px;color:var(--brass2);letter-spacing:1px}
@@ -344,7 +345,7 @@ function seedRecipes(){
 
 /* ============================== state ============================== */
 let S = null;
-function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null }; }
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null }; }
 function load(){
   let raw = null;
   try{ raw = localStorage.getItem(KEY); }catch(e){}
@@ -363,6 +364,7 @@ function load(){
   if(!Array.isArray(d.collapsedCats)) d.collapsedCats = [];
   if(!Array.isArray(d.wishlist)) d.wishlist = [];
   if(!Array.isArray(d.menuSelection)) d.menuSelection = null;
+  if(!Array.isArray(d.pourSelection)) d.pourSelection = null;
   return d;
 }
 let _saveT = null;
@@ -541,6 +543,7 @@ function importJSON(text){
   if(!Array.isArray(d.collapsedCats)) d.collapsedCats = [];
   if(!Array.isArray(d.wishlist)) d.wishlist = [];
   if(!Array.isArray(d.menuSelection)) d.menuSelection = null;
+  if(!Array.isArray(d.pourSelection)) d.pourSelection = null;
   S = d; save(); renderAll(); return null;
 }
 function downloadBackup(){
@@ -832,7 +835,8 @@ function menuPayload(){
     items.push(r);
   }
   items.sort((a,z) => (z.house?1:0) - (a.house?1:0) || (z.rating||0) - (a.rating||0) || a.name.localeCompare(z.name));
-  const pours = S.bottles.filter(b => b.level !== 'out' && POUR_CATS.includes(b.category))
+  const pours = S.bottles.filter(b => b.level !== 'out' && POUR_CATS.includes(b.category)
+      && (!S.pourSelection || S.pourSelection.includes(b.id)))
     .sort((a,z) => POUR_CATS.indexOf(a.category) - POUR_CATS.indexOf(z.category) || a.name.localeCompare(z.name));
   return {
     t: S.menuTitle,
@@ -850,12 +854,12 @@ function renderMenu(){
     '<hr class="menu-rule"><div class="menu-sub">this evening’s pours</div>'];
   if(!p.c.length && !p.s.length) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
   if(p.c.length){
-    html.push('<div class="msec">&mdash; cocktails &mdash;</div>');
+    html.push('<div class="msec">cocktails</div>');
     for(const r of p.c) html.push('<div class="mitem"><div class="mname">', r.h ? '<span class="housestar">★</span>' : '', esc(r.n), '</div>',
       '<div class="mdesc">', esc(r.d), '</div></div>');
   }
   if(p.s.length){
-    html.push('<div class="msec">&mdash; by the pour &mdash;</div>');
+    html.push('<div class="msec">by the pour</div>');
     const byCat = {};
     for(const b of p.s) (byCat[b.c || ''] = byCat[b.c || ''] || []).push(b);
     const order = POUR_CATS.filter(c => byCat[c]).concat(byCat[''] ? [''] : []);
@@ -912,23 +916,37 @@ async function loadSharedMenu(id){
 }
 function openMenuPicker(){
   const makeable = S.recipes.filter(r => recipeStatus(r).makeable).sort((a,z)=>a.name.localeCompare(z.name));
-  if(!makeable.length){ toast('Nothing is makeable yet — stock the shelf first.'); return; }
-  const rows = makeable.map(r => {
-    const on = !S.menuSelection || S.menuSelection.includes(r.id);
-    return '<label class="mp-row rowline" style="padding:7px 2px;gap:10px"><input type="checkbox" class="mp-ck" data-id="' + r.id + '"' +
-      (on ? ' checked' : '') + ' style="width:auto;transform:scale(1.2)">' +
-      '<span class="grow">' + (r.house ? '<span class="housestar">★</span> ' : '') + esc(r.name) + '</span></label>';
-  }).join('');
+  const stockedPours = S.bottles.filter(b => b.level !== 'out' && POUR_CATS.includes(b.category))
+    .sort((a,z) => POUR_CATS.indexOf(a.category) - POUR_CATS.indexOf(z.category) || a.name.localeCompare(z.name));
+  if(!makeable.length && !stockedPours.length){ toast('Nothing is makeable yet — stock the shelf first.'); return; }
+  const ckRow = (cls, id, on, label) =>
+    '<label class="mp-row rowline" style="padding:7px 2px;gap:10px"><input type="checkbox" class="' + cls + '" data-id="' + id + '"' +
+    (on ? ' checked' : '') + ' style="width:auto;transform:scale(1.2)"><span class="grow">' + label + '</span></label>';
+  const cRows = makeable.map(r => ckRow('mp-ck', r.id, !S.menuSelection || S.menuSelection.includes(r.id),
+    (r.house ? '<span class="housestar">★</span> ' : '') + esc(r.name))).join('');
+  const pRows = stockedPours.map(b => ckRow('mp-pk', b.id, !S.pourSelection || S.pourSelection.includes(b.id),
+    esc(b.name) + (b.subtype ? ' <span class="dim small">' + esc(b.subtype) + '</span>' : ''))).join('');
   openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>On tonight&rsquo;s menu</h2>' +
-    '<div class="small mut" style="margin-bottom:8px">Untick anything you&rsquo;d rather not offer. With no saved selection, every makeable drink appears automatically.</div>' +
-    rows +
-    '<div style="display:flex;gap:8px;margin-top:14px"><button class="abtn ghost" id="mp-all">Everything makeable</button>' +
+    '<div class="small mut" style="margin-bottom:8px">Untick anything you&rsquo;d rather not offer. With no saved selection, everything appears automatically.</div>' +
+    (cRows ? '<div class="fieldlbl">Cocktails</div>' + cRows : '') +
+    (pRows ? '<div class="fieldlbl">By the pour</div>' + pRows : '') +
+    '<div style="display:flex;gap:8px;margin-top:14px"><button class="abtn ghost" id="mp-all">Show everything</button>' +
     '<button class="abtn" id="mp-save" style="flex:1">Save selection</button></div>');
-  document.getElementById('mp-all').onclick = () => { S.menuSelection = null; save(); closeModal(); renderMenu(); toast('Menu shows everything makeable.'); };
+  document.getElementById('mp-all').onclick = () => {
+    S.menuSelection = null; S.pourSelection = null;
+    save(); closeModal(); renderMenu(); toast('Menu shows everything automatically.');
+  };
   document.getElementById('mp-save').onclick = () => {
     const cks = [...document.querySelectorAll('#modal .mp-ck')];
-    const ids = cks.filter(el => el.checked).map(el => el.dataset.id);
-    S.menuSelection = ids.length === cks.length ? null : ids; // all ticked = back to automatic
+    if(cks.length){
+      const ids = cks.filter(el => el.checked).map(el => el.dataset.id);
+      S.menuSelection = ids.length === cks.length ? null : ids; // all ticked = back to automatic
+    }
+    const pks = [...document.querySelectorAll('#modal .mp-pk')];
+    if(pks.length){
+      const pids = pks.filter(el => el.checked).map(el => el.dataset.id);
+      S.pourSelection = pids.length === pks.length ? null : pids;
+    }
     save(); closeModal(); renderMenu();
   };
 }
