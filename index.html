@@ -104,6 +104,7 @@ body.menuMode{padding-bottom:0}
 #menu-exit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;color:var(--dim);font-size:20px;z-index:7;padding:8px}
 #menu-share{position:fixed;top:calc(12px + env(safe-area-inset-top));left:12px;color:var(--dim);font-size:16px;z-index:7;padding:8px}
 #menu-curate{position:fixed;top:calc(12px + env(safe-area-inset-top));left:52px;color:var(--dim);font-size:16px;z-index:7;padding:8px}
+#menu-reqs{position:fixed;top:calc(12px + env(safe-area-inset-top));left:92px;color:var(--dim);font-size:14px;z-index:7;padding:8px;white-space:nowrap}
 .wthumb{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--line);flex:none}
 .wthumb.big{width:110px;height:110px}
 .wph{width:54px;height:54px;border-radius:8px;border:1px dashed var(--brassdim);display:flex;align-items:center;justify-content:center;color:var(--brassdim);flex:none;font-size:20px}
@@ -190,6 +191,12 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
   </section>
 
   <section id="view-tonight" class="view">
+    <div class="card hidden" id="bartender-box">
+      <b>Ask the bartender</b>
+      <div class="small mut" style="margin-bottom:8px">What should I make tonight?</div>
+      <input id="bt-mood" placeholder="mood, weather, occasion&hellip; (optional)">
+      <button class="abtn" id="bt-ask" style="width:100%;margin-top:8px">&#129347; Recommend something</button>
+    </div>
     <h2 class="htitle">Makeable now</h2>
     <div id="makeable-list"></div>
     <h2 class="htitle">One bottle away</h2>
@@ -205,6 +212,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
     <button id="menu-exit" title="Back to the bar">&times;</button>
     <button id="menu-share" title="Share the menu">&#10548;</button>
     <button id="menu-curate" title="Choose cocktails">&#9998;</button>
+    <button id="menu-reqs" class="hidden" title="Drink requests">&#128276;</button>
     <div id="menu-body"></div>
   </section>
 </main>
@@ -231,8 +239,9 @@ const RECIPE_URL = 'https://home-bar.cj13mercado.workers.dev/recipe';
 const MENU_URL = 'https://home-bar.cj13mercado.workers.dev/menu';
 const MENU_PAGE = 'https://home-bar.cj13mercado.workers.dev/m/';
 const SYNC_URL = 'https://home-bar.cj13mercado.workers.dev/sync';
+const BARTENDER_URL = 'https://home-bar.cj13mercado.workers.dev/bartender';
 const KEY = 'bar-v1';
-const CFG = { scanUrl: SCAN_URL, recipeUrl: RECIPE_URL, menuUrl: MENU_URL, menuPage: MENU_PAGE, syncUrl: SYNC_URL };   // mutable indirection so tests can disable pieces
+const CFG = { scanUrl: SCAN_URL, recipeUrl: RECIPE_URL, menuUrl: MENU_URL, menuPage: MENU_PAGE, syncUrl: SYNC_URL, bartenderUrl: BARTENDER_URL };   // mutable indirection so tests can disable pieces
 
 const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','spice','milk','other'];
 const SPIRITS = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy'];
@@ -754,6 +763,95 @@ async function aiDraft(payload){
   }
 }
 
+/* ============================== AI bartender ============================== */
+async function requestBartender(mood){
+  const drinks = S.recipes.filter(r => recipeStatus(r).makeable).map(r => ({
+    name: r.name, base: recipeBase(r), rating: r.rating||0, house: !!r.house,
+    low: recipeStatus(r).low, ingredients: autoDesc(r),
+  }));
+  const r = await fetch(CFG.bartenderUrl, { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ mood: mood||'', drinks }) });
+  const j = await r.json().catch(()=>null);
+  if(!r.ok || !j || j.error || !Array.isArray(j.picks)) throw new Error((j && j.error) || 'bartender failed');
+  return j.picks;
+}
+async function askBartender(){
+  const mood = document.getElementById('bt-mood').value.trim();
+  openModal('<h2>Consulting the bartender&hellip;</h2><div class="small mut">Eyeing the shelf, weighing the mood.</div><div class="spin"></div>');
+  try{
+    const picks = await requestBartender(mood);
+    const valid = picks.map(p => ({ rec: S.recipes.find(r => norm(r.name) === norm(p.name)), why: String(p.why||'') })).filter(x => x.rec);
+    if(!valid.length) throw new Error('no valid picks');
+    openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>Tonight, I&rsquo;d pour&hellip;</h2>' +
+      valid.map(x => '<div class="card rcard" data-id="' + x.rec.id + '"><div class="grow">' +
+        '<span class="rname">' + (x.rec.house ? '<span class="housestar">★</span>' : '') + esc(x.rec.name) + '</span>' +
+        '<div class="small mut" style="font-style:italic;margin-top:2px">' + esc(x.why) + '</div></div>' +
+        '<span class="stars">' + stars(x.rec.rating||0) + '</span></div>').join('') +
+      '<button class="abtn ghost" id="bt-again" style="width:100%;margin-top:6px">Ask again</button>');
+    document.querySelectorAll('#modal .rcard').forEach(el => el.addEventListener('click', () => openRecipeDetail(el.dataset.id)));
+    document.getElementById('bt-again').onclick = askBartender;
+  }catch(e){
+    closeModal(); toast('The bartender stepped out — try again in a moment.');
+  }
+}
+
+/* ============================== guest drink requests ============================== */
+let sharedMenuId = null; // set when a guest arrives via a short link
+function currentMenuId(){
+  return (_menuLink.url && CFG.menuPage && _menuLink.url.indexOf(CFG.menuPage) === 0)
+    ? _menuLink.url.slice(CFG.menuPage.length) : null;
+}
+function openRequestSheet(name){
+  openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>Request a ' + esc(name) + '?</h2>' +
+    '<label class="fieldlbl">Your name <span class="dim">(optional)</span></label>' +
+    '<input id="rq-guest" placeholder="so the bartender knows who&rsquo;s thirsty">' +
+    '<button class="abtn" id="rq-send" style="width:100%;margin-top:14px">Send it to the bar</button>');
+  document.getElementById('rq-send').onclick = async () => {
+    const btn = document.getElementById('rq-send'); btn.disabled = true;
+    try{
+      const r = await fetch(CFG.menuUrl + '/' + sharedMenuId + '/req', { method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ drink: name, guest: document.getElementById('rq-guest').value.trim() }) });
+      const j = await r.json().catch(()=>null);
+      if(!r.ok || !j || j.error) throw new Error('send failed');
+      closeModal(); toast('Requested — the bartender is on it. 🍸');
+    }catch(e){ btn.disabled = false; toast('Could not send the request — try again.'); }
+  };
+}
+async function refreshReqCount(){
+  const id = currentMenuId(); const btn = document.getElementById('menu-reqs');
+  if(!id || !btn) return;
+  try{
+    const r = await fetch(CFG.menuUrl + '/' + id + '/req');
+    const j = await r.json().catch(()=>null);
+    const n = (r.ok && j && Array.isArray(j.requests)) ? j.requests.length : 0;
+    btn.innerHTML = n ? '&#128276; ' + n : '&#128276;';
+  }catch(e){}
+}
+async function openRequestInbox(){
+  const id = currentMenuId(); if(!id) return;
+  openModal('<h2>Drink requests</h2><div class="spin"></div>');
+  let list = [];
+  try{
+    const r = await fetch(CFG.menuUrl + '/' + id + '/req');
+    const j = await r.json().catch(()=>null);
+    if(r.ok && j && Array.isArray(j.requests)) list = j.requests;
+  }catch(e){}
+  const rows = list.length ? list.slice().reverse().map(x =>
+    '<div class="card rowline"><div class="grow"><b>' + esc(x.d) + '</b>' + (x.g ? ' <span class="mut">— ' + esc(x.g) + '</span>' : '') + '</div>' +
+    '<span class="dim small">' + new Date(x.at||0).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' }) + '</span></div>').join('')
+    : '<div class="card dim">No requests yet — guests tap a drink on the shared menu.</div>';
+  openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>Drink requests</h2>' + rows +
+    '<div style="display:flex;gap:8px;margin-top:12px"><button class="abtn ghost" id="rq-refresh" style="flex:1">Refresh</button>' +
+    '<button class="abtn ghost" id="rq-clear" style="flex:1">Clear all</button></div>');
+  document.getElementById('rq-refresh').onclick = openRequestInbox;
+  document.getElementById('rq-clear').onclick = async () => {
+    if(!confirm('Clear all requests?')) return;
+    try{ await fetch(CFG.menuUrl + '/' + id + '/req', { method:'DELETE' }); }catch(e){}
+    refreshReqCount(); openRequestInbox();
+  };
+}
+
 /* ============================== rendering ============================== */
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function stars(n){ let s=''; for(let i=1;i<=5;i++) s += i<=n ? '★' : '☆'; return s; }
@@ -847,6 +945,8 @@ function renderSpecs(){
   list.querySelectorAll('.rcard').forEach(el => el.addEventListener('click', () => openRecipeDetail(el.dataset.id)));
 }
 function renderTonight(){
+  document.getElementById('bartender-box').classList.toggle('hidden',
+    !CFG.bartenderUrl || !S.recipes.some(r => recipeStatus(r).makeable));
   const mk = [], lows = [];
   for(const r of S.recipes){
     const st = recipeStatus(r);
@@ -937,12 +1037,12 @@ function renderMenu(){
   document.getElementById('menu-exit').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-share').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-curate').classList.toggle('hidden', !!sharedMenu);
-  if(!sharedMenu) createMenuLink(); // pre-warm the short link so the share sheet opens instantly
+  // (short link pre-warms below, together with the request-inbox bell)
   const html = ['<div class="menu-head">', esc(p.t), '</div>',
     '<hr class="menu-rule"><div class="menu-sub">this evening’s pours</div>'];
   if(!p.c.length && !p.s.length && !p.f) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
   const mline = (r, extraCls) =>
-    '<div class="mitem' + (extraCls||'') + '"><div class="mname' + (r.x ? ' dead' : '') + '">' +
+    '<div class="mitem' + (extraCls||'') + '"' + (r.x ? '' : ' data-n="' + esc(r.n) + '"') + '><div class="mname' + (r.x ? ' dead' : '') + '">' +
     (r.h ? '<span class="housestar">★</span>' : '') + esc(r.n) +
     (r.x ? ' <span class="chip86">86&rsquo;d</span>' : '') + '</div>' +
     '<div class="mdesc">' + esc(r.d) + '</div></div>';
@@ -972,7 +1072,24 @@ function renderMenu(){
       }
     }
   }
+  if(sharedMenu && sharedMenuId && p.c.some(r => !r.x)){
+    html.push('<div class="small dim" style="margin-top:34px">tap a drink to send a request to the bar</div>');
+  }
   document.getElementById('menu-body').innerHTML = html.join('');
+  if(sharedMenu && sharedMenuId){
+    document.querySelectorAll('#menu-body .mitem[data-n]').forEach(el =>
+      el.addEventListener('click', () => openRequestSheet(el.dataset.n)));
+  }
+  const reqBtn = document.getElementById('menu-reqs');
+  reqBtn.classList.add('hidden');
+  if(!sharedMenu && CFG.menuUrl){
+    createMenuLink().then(() => {
+      if(sharedMenu || !document.body.classList.contains('menuMode')) return;
+      if(!currentMenuId()) return; // long-link fallback has no request inbox
+      reqBtn.classList.remove('hidden');
+      refreshReqCount();
+    });
+  }
 }
 /* the whole menu travels inside the link's #hash — nothing is uploaded anywhere */
 function b64uEncode(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
@@ -1010,7 +1127,7 @@ async function loadSharedMenu(id){
   try{
     const r = await fetch(CFG.menuUrl + '/' + id);
     const j = await r.json().catch(()=>null);
-    if(r.ok && validMenuPayload(j)){ enterSharedMenu(j); return; }
+    if(r.ok && validMenuPayload(j)){ sharedMenuId = id; enterSharedMenu(j); return; }
   }catch(e){}
   toast('That menu link has expired.');
 }
@@ -1362,6 +1479,8 @@ document.getElementById('recipe-file').addEventListener('change', e => {
 });
 document.getElementById('menu-share').addEventListener('click', shareMenu);
 document.getElementById('menu-curate').addEventListener('click', openMenuPicker);
+document.getElementById('menu-reqs').addEventListener('click', openRequestInbox);
+document.getElementById('bt-ask').addEventListener('click', askBartender);
 document.getElementById('btn-addwish').addEventListener('click', () => openWishForm(null));
 document.getElementById('wish-file').addEventListener('change', e => {
   const f = e.target.files && e.target.files[0];

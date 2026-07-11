@@ -27,6 +27,11 @@
  * PUT  /sync     -> full app state in (Bearer <backup code>), stored in KV.
  * GET  /sync     -> the stored state back (same Bearer code). Powers the
  *                   app's automatic cloud backup / restore-on-new-phone.
+ * POST /bartender-> { mood, drinks } in, { picks: [{name, why}] } out — the
+ *                   AI recommends from tonight's makeable list.
+ * POST /menu/:id/req    -> { drink, guest? } — a guest requests a drink.
+ * GET  /menu/:id/req    -> { requests } — the host's inbox.
+ * DELETE /menu/:id/req  -> clear the inbox.
  * The API key never leaves the worker.
  */
 
@@ -87,7 +92,7 @@ export default {
   async fetch(request, env) {
     const cors = {
       'access-control-allow-origin': env.ALLOWED_ORIGIN || '*',
-      'access-control-allow-methods': 'GET, POST, PUT, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'access-control-allow-headers': 'content-type, authorization',
     };
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
@@ -95,6 +100,11 @@ export default {
     if (path === '/scan' && request.method === 'POST') return scan(request, env, cors);
     if (path === '/recipe' && request.method === 'POST') return recipe(request, env, cors);
     if (path === '/sync') return sync(request, env, cors);
+    if (path === '/bartender' && request.method === 'POST') return bartender(request, env, cors);
+    const mReq = /^\/menu\/([A-Za-z0-9]{4,32})\/req$/.exec(path);
+    if (mReq && request.method === 'POST') return reqAdd(mReq[1], request, env, cors);
+    if (mReq && request.method === 'GET') return reqList(mReq[1], env, cors);
+    if (mReq && request.method === 'DELETE') return reqClear(mReq[1], env, cors);
     if (path === '/menu' && request.method === 'POST') return menuCreate(request, env, cors);
     const mGet = /^\/menu\/([A-Za-z0-9]{4,32})$/.exec(path);
     if (mGet && request.method === 'GET') return menuGet(mGet[1], env, cors);
@@ -264,6 +274,104 @@ async function sync(request, env, cors) {
     return json({ ok: true }, 200, cors);
   }
   return json({ error: 'method not allowed' }, 405, cors);
+}
+
+/* ---- /bartender : recommend from tonight's makeable list ---- */
+const BARTENDER_SCHEMA = {
+  type: 'object',
+  properties: {
+    picks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { name: { type: 'string' }, why: { type: 'string' } },
+        required: ['name', 'why'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['picks'],
+  additionalProperties: false,
+};
+
+async function bartender(request, env, cors) {
+  if (!env.ANTHROPIC_API_KEY) return json({ error: 'ANTHROPIC_API_KEY secret not set on the worker' }, 500, cors);
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: 'bad request body' }, 400, cors); }
+  const mood = String(body && body.mood || '').slice(0, 300);
+  const drinks = (Array.isArray(body && body.drinks) ? body.drinks : []).slice(0, 80).map((x) => ({
+    name: String(x && x.name || '').slice(0, 80),
+    base: String(x && x.base || '').slice(0, 20),
+    rating: Math.max(0, Math.min(5, parseInt(x && x.rating, 10) || 0)),
+    house: !!(x && x.house),
+    low: !!(x && x.low),
+    ingredients: String(x && x.ingredients || '').slice(0, 200),
+  })).filter((x) => x.name);
+  if (!drinks.length) return json({ error: 'no makeable drinks provided' }, 400, cors);
+
+  const prompt = 'You are the house bartender at a small, warm home bar. From the list of drinks that can be made ' +
+    'RIGHT NOW (with base spirit, the owner\'s 0-5 rating, house flag for their own creations, and a low flag meaning ' +
+    'a key bottle is nearly empty), pick 2-3 to recommend for tonight. Rules: the name field must EXACTLY match a ' +
+    'name from the list. Vary the base spirits across your picks when sensible. Weigh the mood/occasion heavily if ' +
+    'given. A high rating means the owner loves it; a house drink is their pride. If a pick is flagged low, you may ' +
+    'note it kindly (last call for that bottle). Each why is ONE warm, specific sentence a good bartender would ' +
+    'actually say, under 140 characters — no lists, no hedging.\n\n' +
+    'MOOD/OCCASION: ' + (mood || '(none given — use your judgment)') + '\n\nDRINKS:\n' + JSON.stringify(drinks);
+
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-8',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }],
+      output_config: { format: { type: 'json_schema', schema: BARTENDER_SCHEMA } },
+    }),
+  });
+  const resp = await r.json().catch(() => null);
+  if (!r.ok) return json({ error: (resp && resp.error && resp.error.message) || 'api error' }, 502, cors);
+  if (resp && resp.stop_reason === 'refusal') return json({ error: 'the model declined this request' }, 502, cors);
+  const out = ((resp && resp.content) || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  let parsed;
+  try { parsed = JSON.parse(out); } catch (e) { return json({ error: 'could not parse model output' }, 502, cors); }
+  const names = new Set(drinks.map((d) => d.name.toLowerCase()));
+  const picks = (Array.isArray(parsed && parsed.picks) ? parsed.picks : [])
+    .filter((p) => p && names.has(String(p.name || '').toLowerCase())).slice(0, 3);
+  return json({ picks }, 200, cors);
+}
+
+/* ---- /menu/:id/req : guest drink requests ---- */
+async function reqAdd(id, request, env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  const menu = await env.MENUS.get('m:' + id);
+  if (!menu) return json({ error: 'menu expired' }, 404, cors);
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: 'bad request body' }, 400, cors); }
+  const drink = String(body && body.drink || '').slice(0, 80).trim();
+  const guest = String(body && body.guest || '').slice(0, 40).trim();
+  if (!drink) return json({ error: 'no drink named' }, 400, cors);
+  let list = [];
+  try { list = JSON.parse(await env.MENUS.get('req:' + id) || '[]'); } catch (e) {}
+  if (!Array.isArray(list)) list = [];
+  if (list.length >= 100) return json({ error: 'the request box is full' }, 429, cors);
+  list.push({ d: drink, g: guest, at: Date.now() });
+  await env.MENUS.put('req:' + id, JSON.stringify(list), { expirationTtl: MENU_TTL });
+  return json({ ok: true, count: list.length }, 200, cors);
+}
+async function reqList(id, env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  let list = [];
+  try { list = JSON.parse(await env.MENUS.get('req:' + id) || '[]'); } catch (e) {}
+  return json({ requests: Array.isArray(list) ? list : [] }, 200, cors);
+}
+async function reqClear(id, env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  await env.MENUS.delete('req:' + id);
+  return json({ ok: true }, 200, cors);
 }
 
 /* ---- /menu + /m : short shareable menu links (KV-backed, 90-day TTL) ---- */

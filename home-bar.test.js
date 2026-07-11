@@ -20,6 +20,12 @@ const dom = new JSDOM(html, {
         return v ? { ok:true, status:200, json: async()=>JSON.parse(v), text: async()=>v }
                  : { ok:false, status:404, json: async()=>({error:'nf'}), text: async()=>'{"error":"nf"}' };
       }
+      if(u.includes('/bartender')) return { ok:true, status:200, json: async () => (w.__bartenderResult || { picks: [] }) };
+      if(u.includes('/req')){
+        if(opts && opts.method === 'POST'){ w.__reqStore = w.__reqStore || []; w.__reqStore.push(JSON.parse(opts.body)); return { ok:true, status:200, json: async () => ({ ok:true, count:w.__reqStore.length }) }; }
+        if(opts && opts.method === 'DELETE'){ w.__reqStore = []; return { ok:true, status:200, json: async () => ({ ok:true }) }; }
+        return { ok:true, status:200, json: async () => ({ requests: (w.__reqStore||[]).map((x,i) => ({ d:x.drink, g:x.guest, at:1700000000000+i })) }) };
+      }
       if(u.includes('/menu')){
         if(opts && opts.method === 'POST'){
           if(w.__menuPostFail) return { ok:false, status:500, json: async () => ({ error:'kv down' }) };
@@ -301,7 +307,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('S.bottles.find(b=>b.name==="Sipsmith").level="full"; renderMenu();'); await sleep(20);
   assert(d.querySelectorAll('#menu-body .mname.dead').length===0, 'restocking clears the 86 marks');
 
-  assert(d.querySelectorAll('#view-menu button').length===3, 'admin menu chrome is just curate + share + exit');
+  assert(d.querySelectorAll('#view-menu button').length===4, 'admin menu chrome is just curate + share + requests + exit');
   d.getElementById('menu-exit').click(); await sleep(20);
   assert(!d.body.classList.contains('menuMode'), 'menu exit returns to admin');
 
@@ -446,6 +452,39 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('S.menuTitle')==='Restored Bar' && w.eval('SYNC.token')===altCode, 'restore replaces state and adopts the new code');
   assert(typeof (await w.syncRestore('not-a-code'))==='string', 'a malformed code is rejected politely');
   assert(typeof (await w.syncRestore('c'.repeat(32)))==='string', 'an unknown code reports no backup found');
+
+  // --- AI bartender ---
+  w.eval('setTab("tonight")'); await sleep(20);
+  assert(!d.getElementById('bartender-box').classList.contains('hidden'), 'bartender box shows when drinks are makeable');
+  w.__bartenderResult = { picks: [
+    { name:'Gimlet', why:'Bright and cold, and your gin is singing tonight.' },
+    { name:'Not A Real Drink', why:'should be filtered out' } ] };
+  d.getElementById('bt-mood').value = 'long day';
+  d.getElementById('bt-ask').click(); await sleep(100);
+  assert(d.querySelectorAll('#modal .rcard').length===1, 'bartender modal keeps only picks that actually exist');
+  assert(d.querySelector('#modal .rcard .rname').textContent.includes('Gimlet'), 'the valid pick renders with its reasoning');
+  d.querySelector('#modal .rcard').click(); await sleep(30);
+  assert(d.getElementById('rd-scale')!==null, 'tapping a pick opens the full spec');
+  w.eval('closeModal()');
+
+  // --- guest drink requests ---
+  w.__reqStore = [];
+  w.__sharedPayload = { t:'Party', c:[{ n:'Negroni', d:'gin, Campari, sweet vermouth', h:false }], s:[] };
+  await w.loadSharedMenu('abc123'); await sleep(30);
+  const gItem = d.querySelector('#menu-body .mitem[data-n]');
+  assert(!!gItem && d.getElementById('menu-body').textContent.includes('tap a drink'), 'guest menu invites tapping a drink to request it');
+  gItem.click(); await sleep(20);
+  d.getElementById('rq-guest').value = 'Maria';
+  d.getElementById('rq-send').click(); await sleep(60);
+  assert(w.__reqStore.length===1 && w.__reqStore[0].drink==='Negroni' && w.__reqStore[0].guest==='Maria', 'a guest request posts to the worker');
+  w.eval('sharedMenu=null; sharedMenuId=null; renderMenu();'); await sleep(120);
+  assert(!d.getElementById('menu-reqs').classList.contains('hidden'), 'the host sees the request bell in admin menu mode');
+  assert(d.getElementById('menu-reqs').textContent.includes('1'), 'the bell shows the request count');
+  await w.openRequestInbox(); await sleep(60);
+  assert(d.getElementById('modal').textContent.includes('Negroni') && d.getElementById('modal').textContent.includes('Maria'), 'the inbox lists who wants what');
+  d.getElementById('rq-clear').click(); await sleep(80);
+  assert(w.__reqStore.length===0, 'clear-all empties the request box');
+  w.eval('closeModal(); setTab("shelf");');
 
   // --- menu descriptions: capped auto + owner override ---
   w.upsertRecipe({ name:'Test Coquito', method:'blend', glass:'rocks', garnish:'', notes:'', rating:0, house:false,
