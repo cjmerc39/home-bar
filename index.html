@@ -234,7 +234,7 @@ const SYNC_URL = 'https://home-bar.cj13mercado.workers.dev/sync';
 const KEY = 'bar-v1';
 const CFG = { scanUrl: SCAN_URL, recipeUrl: RECIPE_URL, menuUrl: MENU_URL, menuPage: MENU_PAGE, syncUrl: SYNC_URL };   // mutable indirection so tests can disable pieces
 
-const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','other'];
+const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','spice','milk','other'];
 const SPIRITS = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy'];
 const SUBTYPES = {
   tequila:['blanco','reposado','anejo','cristalino'],
@@ -250,6 +250,8 @@ const SUBTYPES = {
   bitters:['aromatic','orange','peychauds','mole','chocolate'],
   wine:['sparkling','red','white','sherry','port'],
   mixer:['soda water','tonic','ginger beer','grapefruit soda','cola','pineapple juice','grapefruit juice','orgeat'],
+  spice:['cinnamon','nutmeg','clove','star anise','vanilla','allspice','ginger'],
+  milk:['coconut milk','condensed milk','evaporated milk','cream of coconut','whole milk','oat milk'],
   other:[]
 };
 const DEFAULT_STAPLES = ['lime','lemon','sugar','simple syrup','honey','agave syrup','egg white','mint','salt','espresso','coconut cream','cream'];
@@ -387,7 +389,7 @@ function tagKey(t){ return norm(t.category) + (t.subtype ? '/' + norm(t.subtype)
 function tagLabel(t){
   const k = norm(t.category) + '/' + norm(t.subtype||'');
   if(TAG_LABELS[k]) return TAG_LABELS[k];
-  if(norm(t.category)==='mixer' && t.subtype) return norm(t.subtype);
+  if(['mixer','spice','milk'].includes(norm(t.category)) && t.subtype) return norm(t.subtype);
   return t.subtype ? norm(t.subtype) + ' ' + norm(t.category) : norm(t.category);
 }
 function bottleMatchesTag(b, tag){

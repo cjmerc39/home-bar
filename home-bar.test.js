@@ -94,6 +94,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Margarita")).missing.every(m=>m.status.kind!=="staple")'), 'missing list holds gating reqs only');
   assert(!JSON.parse(w.eval('JSON.stringify(unlockGroups())')).some(g=>g.key.startsWith('staple:')||g.key.startsWith('tag:mixer')), 'unlocks only ever suggest alcohol bottles');
 
+  // spice & milk categories: labelled cleanly, never gate
+  assert(w.eval('CATEGORIES.includes("spice") && CATEGORIES.includes("milk")'), 'spice and milk are first-class categories');
+  assert(w.eval('tagLabel({category:"spice",subtype:"cinnamon"})')==='cinnamon', 'a spice ingredient reads as just the spice');
+  assert(w.eval('tagLabel({category:"milk",subtype:"condensed milk"})')==='condensed milk', 'a milk ingredient reads cleanly');
+  assert(w.eval('reqGates({tag:{category:"spice",subtype:"cinnamon"}})')===false && w.eval('reqGates({tag:{category:"milk"}})')===false, 'spice and milk never gate a recipe');
+
   // --- low-warning state ---
   const ginId = w.eval('S.bottles.find(b=>b.name==="Sipsmith").id');
   w.eval('cycleLevel("'+ginId+'")'); // full -> low

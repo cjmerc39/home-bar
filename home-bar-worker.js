@@ -30,7 +30,7 @@
  * The API key never leaves the worker.
  */
 
-const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','other'];
+const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','spice','milk','other'];
 const UNITS = ['oz','ml','cup','gallon','dash','tsp','bsp','drop','leaf','wedge','pinch','rinse','top','whole'];
 const METHODS = ['stir','shake','build','blend'];
 const DEFAULT_STAPLES = ['lime','lemon','sugar','simple syrup','honey','agave syrup','egg white','mint','salt','espresso','coconut cream','cream'];
@@ -186,10 +186,12 @@ const RECIPE_SCHEMA = {
 
 function recipePrompt(staples) {
   return 'Turn the given cocktail (described in text, or photographed from a book/card) into ONE structured recipe. ' +
-    'Ingredient rules: any household or pantry ingredient (citrus, syrup, spice, dairy, eggs, coffee, coconut milk, etc.) ' +
+    'Ingredient rules: spices (cinnamon, nutmeg, clove, vanilla…) are kind:"tag" with category "spice" and the spice name ' +
+    'as the lowercase subtype. Milks and creams (coconut milk, condensed milk, evaporated milk…) are kind:"tag" with ' +
+    'category "milk" and the milk name as the subtype. Any other household ingredient (citrus, syrup, eggs, coffee, mint) ' +
     'is kind:"staple" with a short lowercase name — use the exact string from this list when one matches: [' +
-    staples.join(', ') + '], otherwise invent a sensible short name (e.g. "cinnamon", "condensed milk"). ' +
-    'Never file spices, milks, syrups, juices, or other pantry items under kind:"tag" with category "other" — they are staples. ' +
+    staples.join(', ') + '], otherwise a sensible short name. ' +
+    'Never use category "other" for pantry items. ' +
     'Everything alcoholic or bottled from a store is kind:"tag" with a category from the allowed list and, ' +
     'when meaningful, a lowercase subtype following these conventions: ' + SUBTYPE_CONVENTIONS + ' ' +
     'qty is a plain decimal string like "0.75". Keep glass and garnish short. Put technique tips in notes. ' +
