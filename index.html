@@ -103,6 +103,12 @@ body.menuMode{padding-bottom:0}
 #view-menu{min-height:100vh;padding:34px 8px 60px;text-align:center}
 #menu-exit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;color:var(--dim);font-size:20px;z-index:7;padding:8px}
 #menu-share{position:fixed;top:calc(12px + env(safe-area-inset-top));left:12px;color:var(--dim);font-size:16px;z-index:7;padding:8px}
+#menu-curate{position:fixed;top:calc(12px + env(safe-area-inset-top));left:52px;color:var(--dim);font-size:16px;z-index:7;padding:8px}
+.wthumb{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--line);flex:none}
+.wthumb.big{width:110px;height:110px}
+.wph{width:54px;height:54px;border-radius:8px;border:1px dashed var(--brassdim);display:flex;align-items:center;justify-content:center;color:var(--brassdim);flex:none;font-size:20px}
+.wish{cursor:pointer}
+.wname{font-weight:600}
 .msec{font-size:11px;letter-spacing:3.5px;text-transform:uppercase;color:var(--dim);margin:34px 0 18px}
 .aibox{background:var(--bg3);border:1px dashed var(--brassdim);border-radius:10px;padding:10px;margin:10px 0 2px}
 .aibox .ttl{color:var(--brass2);font-size:13px;letter-spacing:.6px;margin-bottom:6px}
@@ -185,11 +191,15 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
     <div id="unlock-list"></div>
     <h2 class="htitle">Shopping list</h2>
     <div id="shopping-list"></div>
+    <h2 class="htitle">Wishlist</h2>
+    <div id="wish-list"></div>
+    <button class="abtn ghost" id="btn-addwish" style="width:100%;margin-top:6px">+ Add to wishlist</button>
   </section>
 
   <section id="view-menu" class="view">
     <button id="menu-exit" title="Back to the bar">&times;</button>
     <button id="menu-share" title="Share the menu">&#10548;</button>
+    <button id="menu-curate" title="Choose cocktails">&#9998;</button>
     <div id="menu-body"></div>
   </section>
 </main>
@@ -205,6 +215,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 <div id="toast"></div>
 <input type="file" id="scan-file" accept="image/*" class="hidden">
 <input type="file" id="recipe-file" accept="image/*" class="hidden">
+<input type="file" id="wish-file" accept="image/*" class="hidden">
 <input type="file" id="import-file" accept="application/json,.json" class="hidden">
 
 <script>
@@ -331,7 +342,7 @@ function seedRecipes(){
 
 /* ============================== state ============================== */
 let S = null;
-function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[] }; }
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null }; }
 function load(){
   let raw = null;
   try{ raw = localStorage.getItem(KEY); }catch(e){}
@@ -348,10 +359,15 @@ function load(){
   if(!Array.isArray(d.staples)) d.staples = DEFAULT_STAPLES.slice();
   if(typeof d.menuTitle !== 'string') d.menuTitle = "CJ's Bar";
   if(!Array.isArray(d.collapsedCats)) d.collapsedCats = [];
+  if(!Array.isArray(d.wishlist)) d.wishlist = [];
+  if(!Array.isArray(d.menuSelection)) d.menuSelection = null;
   return d;
 }
 let _saveT = null;
-function save(){ clearTimeout(_saveT); _saveT = setTimeout(()=>{ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }, 300); }
+function save(){ clearTimeout(_saveT); _saveT = setTimeout(()=>{
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch(e){ toast('Storage is full — remove a wishlist photo or export a backup.'); }
+}, 300); }
 function uid(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 /* ============================== matcher ============================== */
@@ -463,6 +479,48 @@ function autoDesc(r){
   return r.ingredients.filter(i => !(i.note||'').includes('optional')).map(ingLabel).join(', ');
 }
 
+/* ============================== wishlist ============================== */
+function upsertWish(wi){
+  if(!wi.id) wi.id = uid('w');
+  wi.name = (wi.name||'').trim();
+  if(!wi.name) return null;
+  const i = S.wishlist.findIndex(x => x.id === wi.id);
+  if(i >= 0) S.wishlist[i] = wi; else S.wishlist.push(wi);
+  save(); renderAll(); return wi.id;
+}
+function deleteWish(id){ S.wishlist = S.wishlist.filter(x => x.id !== id); save(); renderAll(); }
+let _wishFileCb = null;
+function openWishForm(id){
+  const wi = id ? S.wishlist.find(x => x.id === id) : { name:'', notes:'', img:null };
+  if(!wi) return;
+  let img = wi.img || null;
+  openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>' + (id?'Edit wish':'Add to wishlist') + '</h2>' +
+    '<label class="fieldlbl">Bottle</label><input id="wf-name" value="' + esc(wi.name) + '" placeholder="e.g. Chartreuse V.E.P.">' +
+    '<label class="fieldlbl">Notes</label><input id="wf-notes" value="' + esc(wi.notes||'') + '" placeholder="where you saw it, price, why…">' +
+    '<label class="fieldlbl">Photo</label><div id="wf-photo">' + (img ? '<img class="wthumb big" src="' + esc(img) + '">' : '<div class="dim small">No photo yet.</div>') + '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:8px"><button class="abtn ghost" id="wf-pic" style="flex:1">' + (img?'Replace photo':'Add a photo') + '</button>' +
+    '<button class="abtn ghost" id="wf-picdel"' + (img?'':' disabled') + '>Remove</button></div>' +
+    '<div style="display:flex;gap:8px;margin-top:16px">' +
+      (id ? '<button class="abtn danger" id="wf-del">Delete</button>' : '') +
+      '<button class="abtn" id="wf-save" style="flex:1">Save</button></div>');
+  const setPhoto = () => {
+    document.getElementById('wf-photo').innerHTML = img ? '<img class="wthumb big" src="' + esc(img) + '">' : '<div class="dim small">No photo yet.</div>';
+    document.getElementById('wf-pic').textContent = img ? 'Replace photo' : 'Add a photo';
+    document.getElementById('wf-picdel').disabled = !img;
+  };
+  _wishFileCb = p => { img = p.dataUrl; setPhoto(); };
+  document.getElementById('wf-pic').onclick = () => document.getElementById('wish-file').click();
+  document.getElementById('wf-picdel').onclick = () => { img = null; setPhoto(); };
+  document.getElementById('wf-save').onclick = () => {
+    const ok = upsertWish({ id: id || undefined, name: document.getElementById('wf-name').value,
+      notes: document.getElementById('wf-notes').value.trim(), img });
+    if(!ok){ toast('Give it a name first.'); return; }
+    closeModal();
+  };
+  const del = document.getElementById('wf-del');
+  if(del) del.onclick = () => { if(confirm('Remove this wish?')){ deleteWish(id); closeModal(); } };
+}
+
 /* ============================== export / import ============================== */
 function exportJSON(){ return JSON.stringify(S, null, 2); }
 function importJSON(text){
@@ -472,6 +530,8 @@ function importJSON(text){
   if(!Array.isArray(d.staples)) d.staples = DEFAULT_STAPLES.slice();
   if(typeof d.menuTitle !== 'string') d.menuTitle = "CJ's Bar";
   if(!Array.isArray(d.collapsedCats)) d.collapsedCats = [];
+  if(!Array.isArray(d.wishlist)) d.wishlist = [];
+  if(!Array.isArray(d.menuSelection)) d.menuSelection = null;
   S = d; save(); renderAll(); return null;
 }
 function downloadBackup(){
@@ -491,8 +551,8 @@ async function requestScan(media_type, data){
   if(!r.ok || !j || j.error) throw new Error((j && j.error) || ('scan failed: ' + r.status));
   return Array.isArray(j.bottles) ? j.bottles : [];
 }
-// downscale to <=1568px long edge, jpeg q0.8; falls back to the raw file where canvas is unavailable
-function fileToScanPayload(file){
+// downscale to <=maxEdge px long edge, jpeg; falls back to the raw file where canvas is unavailable
+function downscaleFile(file, maxEdge, quality){
   return new Promise((resolve, reject)=>{
     const fr = new FileReader();
     fr.onerror = () => reject(new Error('could not read the photo'));
@@ -501,24 +561,23 @@ function fileToScanPayload(file){
       const raw = () => {
         const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
         if(!m) return reject(new Error('could not read the photo'));
-        resolve({ media_type: m[1], data: m[2] });
+        resolve({ dataUrl, media_type: m[1], data: m[2] });
       };
       try{
         const img = new Image();
         img.onload = () => {
           try{
-            const MAX = 1568;
-            const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+            const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
             const cv = document.createElement('canvas');
             cv.width = Math.max(1, Math.round(img.width * scale));
             cv.height = Math.max(1, Math.round(img.height * scale));
             const cx = cv.getContext && cv.getContext('2d');
             if(!cx) return raw();
             cx.drawImage(img, 0, 0, cv.width, cv.height);
-            const out = cv.toDataURL('image/jpeg', 0.8);
+            const out = cv.toDataURL('image/jpeg', quality);
             const m = /^data:([^;]+);base64,(.*)$/.exec(out);
             if(!m) return raw();
-            resolve({ media_type: m[1], data: m[2] });
+            resolve({ dataUrl: out, media_type: m[1], data: m[2] });
           }catch(e){ raw(); }
         };
         img.onerror = raw;
@@ -528,6 +587,7 @@ function fileToScanPayload(file){
     fr.readAsDataURL(file);
   });
 }
+function fileToScanPayload(file){ return downscaleFile(file, 1568, 0.8); }
 async function handleScanFile(file){
   openModal('<h2>Reading the shelf&hellip;</h2><div class="small mut">The AI is squinting at your labels. ~15 seconds.</div><div class="spin"></div>');
   try{
@@ -742,12 +802,25 @@ function renderTonight(){
   for(const b of S.bottles.filter(b => b.level === 'low')) shop.push('<div class="shopline"><span style="color:var(--low)">&#9679;</span><span>' + esc(b.name) + ' <span class="dim small">running low</span></span></div>');
   for(const b of S.bottles.filter(b => b.level === 'out')) shop.push('<div class="shopline"><span style="color:var(--out)">&#9679;</span><span>' + esc(b.name) + ' <span class="dim small">out</span></span></div>');
   document.getElementById('shopping-list').innerHTML = shop.length ? '<div class="card">' + shop.join('') + '</div>' : '<div class="card dim">Nothing needed. Impressive shelf.</div>';
+
+  const wishEl = document.getElementById('wish-list');
+  wishEl.innerHTML = S.wishlist.length ? S.wishlist.map(x =>
+    '<div class="card wish rowline" data-id="' + x.id + '">' +
+    (x.img ? '<img class="wthumb" src="' + esc(x.img) + '">' : '<div class="wph">&#127870;</div>') +
+    '<div class="grow"><div class="wname">' + esc(x.name) + '</div>' +
+    (x.notes ? '<div class="small mut">' + esc(x.notes) + '</div>' : '') + '</div></div>'
+  ).join('') : '<div class="card dim">Bottles you’re hunting — snap the label so you remember it.</div>';
+  wishEl.querySelectorAll('.wish').forEach(el => el.addEventListener('click', () => openWishForm(el.dataset.id)));
 }
 let sharedMenu = null; // payload from a shared link (read-only guest view)
 const POUR_CATS = SPIRITS.concat(['amaro']);
 function menuPayload(){
   const items = [];
-  for(const r of S.recipes){ if(recipeStatus(r).makeable) items.push(r); }
+  for(const r of S.recipes){
+    if(!recipeStatus(r).makeable) continue;
+    if(S.menuSelection && !S.menuSelection.includes(r.id)) continue;
+    items.push(r);
+  }
   items.sort((a,z) => (z.house?1:0) - (a.house?1:0) || (z.rating||0) - (a.rating||0) || a.name.localeCompare(z.name));
   const pours = S.bottles.filter(b => b.level !== 'out' && POUR_CATS.includes(b.category))
     .sort((a,z) => POUR_CATS.indexOf(a.category) - POUR_CATS.indexOf(z.category) || a.name.localeCompare(z.name));
@@ -761,6 +834,7 @@ function renderMenu(){
   const p = sharedMenu || menuPayload();
   document.getElementById('menu-exit').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-share').classList.toggle('hidden', !!sharedMenu);
+  document.getElementById('menu-curate').classList.toggle('hidden', !!sharedMenu);
   const html = ['<div class="menu-head">', esc(p.t), '</div>',
     '<hr class="menu-rule"><div class="menu-sub">this evening’s pours</div>'];
   if(!p.c.length && !p.s.length) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
@@ -798,6 +872,28 @@ function parseMenuHash(hash){
   }catch(e){ return null; }
 }
 function enterSharedMenu(p){ sharedMenu = p; setTab('menu'); }
+function openMenuPicker(){
+  const makeable = S.recipes.filter(r => recipeStatus(r).makeable).sort((a,z)=>a.name.localeCompare(z.name));
+  if(!makeable.length){ toast('Nothing is makeable yet — stock the shelf first.'); return; }
+  const rows = makeable.map(r => {
+    const on = !S.menuSelection || S.menuSelection.includes(r.id);
+    return '<label class="mp-row rowline" style="padding:7px 2px;gap:10px"><input type="checkbox" class="mp-ck" data-id="' + r.id + '"' +
+      (on ? ' checked' : '') + ' style="width:auto;transform:scale(1.2)">' +
+      '<span class="grow">' + (r.house ? '<span class="housestar">★</span> ' : '') + esc(r.name) + '</span></label>';
+  }).join('');
+  openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>On tonight&rsquo;s menu</h2>' +
+    '<div class="small mut" style="margin-bottom:8px">Untick anything you&rsquo;d rather not offer. With no saved selection, every makeable drink appears automatically.</div>' +
+    rows +
+    '<div style="display:flex;gap:8px;margin-top:14px"><button class="abtn ghost" id="mp-all">Everything makeable</button>' +
+    '<button class="abtn" id="mp-save" style="flex:1">Save selection</button></div>');
+  document.getElementById('mp-all').onclick = () => { S.menuSelection = null; save(); closeModal(); renderMenu(); toast('Menu shows everything makeable.'); };
+  document.getElementById('mp-save').onclick = () => {
+    const cks = [...document.querySelectorAll('#modal .mp-ck')];
+    const ids = cks.filter(el => el.checked).map(el => el.dataset.id);
+    S.menuSelection = ids.length === cks.length ? null : ids; // all ticked = back to automatic
+    save(); closeModal(); renderMenu();
+  };
+}
 async function shareMenu(){
   const url = buildMenuLink();
   try{
@@ -1041,6 +1137,14 @@ document.getElementById('recipe-file').addEventListener('change', e => {
     .catch(() => toast('Could not read that photo.'));
 });
 document.getElementById('menu-share').addEventListener('click', shareMenu);
+document.getElementById('menu-curate').addEventListener('click', openMenuPicker);
+document.getElementById('btn-addwish').addEventListener('click', () => openWishForm(null));
+document.getElementById('wish-file').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!f || !_wishFileCb) return;
+  downscaleFile(f, 512, 0.75).then(p => _wishFileCb(p)).catch(() => toast('Could not read that photo.'));
+});
 document.getElementById('import-file').addEventListener('change', e => {
   const f = e.target.files && e.target.files[0];
   e.target.value = '';

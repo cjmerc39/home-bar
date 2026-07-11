@@ -190,10 +190,28 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('parseMenuHash("#m=!!!notvalid")')===null && w.eval('parseMenuHash("#nope")')===null, 'garbage share hashes are rejected');
   w.eval('enterSharedMenu(parseMenuHash('+JSON.stringify(hash)+'))'); await sleep(20);
   assert(d.body.classList.contains('menuMode') && d.getElementById('menu-exit').classList.contains('hidden')
-      && d.getElementById('menu-share').classList.contains('hidden'), 'a shared link locks into the guest menu with zero admin controls');
+      && d.getElementById('menu-share').classList.contains('hidden') && d.getElementById('menu-curate').classList.contains('hidden'),
+      'a shared link locks into the guest menu with zero admin controls');
   w.eval('sharedMenu=null; renderMenu();'); await sleep(20);
 
-  assert(d.querySelectorAll('#view-menu button').length===2, 'admin menu chrome is just share + exit');
+  // menu curation: pick which cocktails appear
+  w.eval('openMenuPicker()'); await sleep(20);
+  const mkIds = JSON.parse(w.eval('JSON.stringify(S.recipes.filter(r=>recipeStatus(r).makeable).map(r=>r.id))'));
+  assert(d.querySelectorAll('#modal .mp-ck').length===mkIds.length, 'menu picker lists every makeable cocktail');
+  const gimRow = [...d.querySelectorAll('#modal .mp-row')].find(r=>r.textContent.includes('Gimlet'));
+  gimRow.querySelector('.mp-ck').checked = false;
+  d.getElementById('mp-save').click(); await sleep(20);
+  assert(w.eval('Array.isArray(S.menuSelection)') && w.eval('S.menuSelection.length')===mkIds.length-1, 'partial selection is saved');
+  assert(![...d.querySelectorAll('#menu-body .mitem:not(.pour) .mname')].some(e=>e.textContent.includes('Gimlet')), 'unchecked cocktail leaves the menu');
+  const curLink = w.eval('buildMenuLink()');
+  const curPayload = JSON.parse(w.eval('JSON.stringify(parseMenuHash('+JSON.stringify('#m='+curLink.split('#m=')[1])+'))'));
+  assert(!curPayload.c.some(x=>x.n==='Gimlet'), 'shared link respects the curated selection');
+  w.eval('openMenuPicker()'); await sleep(20);
+  d.getElementById('mp-all').click(); await sleep(20);
+  assert(w.eval('S.menuSelection===null'), 'everything-makeable resets to automatic');
+  assert([...d.querySelectorAll('#menu-body .mitem:not(.pour) .mname')].some(e=>e.textContent.includes('Gimlet')), 'menu shows all makeable again');
+
+  assert(d.querySelectorAll('#view-menu button').length===3, 'admin menu chrome is just curate + share + exit');
   d.getElementById('menu-exit').click(); await sleep(20);
   assert(!d.body.classList.contains('menuMode'), 'menu exit returns to admin');
 
@@ -257,6 +275,29 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('rf-save').click(); await sleep(30);
   assert(w.eval('S.recipes.some(r=>r.name==="Division Bell")'), 'drafted recipe saves like any other');
   w.eval('deleteRecipe(S.recipes.find(r=>r.name==="Division Bell").id)');
+
+  // --- wishlist with photos ---
+  w.eval('setTab("tonight")');
+  assert(d.getElementById('wish-list')!==null && d.getElementById('btn-addwish')!==null, 'Tonight tab has a wishlist section');
+  d.getElementById('btn-addwish').click(); await sleep(20);
+  d.getElementById('wf-name').value = 'Chartreuse V.E.P.';
+  d.getElementById('wf-notes').value = 'saw it at the shop downtown';
+  d.getElementById('wf-save').click(); await sleep(30);
+  assert(w.eval('S.wishlist.length')===1 && w.eval('S.wishlist[0].notes').includes('downtown'), 'wishlist add saves name + notes');
+  assert([...d.querySelectorAll('#wish-list .wname')].some(e=>e.textContent==='Chartreuse V.E.P.'), 'wish renders on Tonight');
+  w.eval('S.wishlist[0].img="data:image/jpeg;base64,aGVsbG8="; save(); renderTonight();'); await sleep(20);
+  assert(d.querySelector('#wish-list img.wthumb')!==null, 'wish photo renders as a thumbnail');
+  d.querySelector('#wish-list .wish').click(); await sleep(20);
+  assert(d.getElementById('wf-name').value==='Chartreuse V.E.P.' && d.querySelector('#wf-photo img')!==null, 'tapping a wish opens it for editing with its photo');
+  d.getElementById('wf-del').click(); await sleep(30);
+  assert(w.eval('S.wishlist.length')===0, 'wish delete removes it');
+  // wishlist survives export -> wipe -> import
+  w.eval('upsertWish({name:"Islay dream", notes:"", img:"data:image/jpeg;base64,aGk="})');
+  const wlBackup = w.eval('exportJSON()');
+  const bottleCount = w.eval('S.bottles.length');
+  w.eval('localStorage.clear(); S = fresh(); renderAll();');
+  assert(w.eval('importJSON('+JSON.stringify(wlBackup)+')')===null, 'backup with wishlist imports');
+  assert(w.eval('S.wishlist.length')===1 && w.eval('S.wishlist[0].img').startsWith('data:image') && w.eval('S.bottles.length')===bottleCount, 'wishlist photos survive the backup round-trip');
 
   // --- persistence + migration guard ---
   await sleep(600); // let the debounced save flush
