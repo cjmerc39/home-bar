@@ -9,6 +9,17 @@ const dom = new JSDOM(html, {
       const u = String(url);
       if(u.includes('/scan')) return { ok:true, status:200, json: async () => (w.__scanResult || { bottles: [] }) };
       if(u.includes('/recipe')) return { ok:true, status:200, json: async () => (w.__recipeResult || { error:'no mock' }) };
+      if(u.includes('/sync')){
+        const tok = String((opts&&opts.headers&&(opts.headers.Authorization||opts.headers.authorization))||'').replace('Bearer ','');
+        if(opts && opts.method==='PUT'){
+          w.__syncStore = w.__syncStore || {};
+          w.__syncStore[tok] = opts.body;
+          return { ok:true, status:200, json: async()=>({ok:true}), text: async()=>'{"ok":true}' };
+        }
+        const v = (w.__syncStore||{})[tok];
+        return v ? { ok:true, status:200, json: async()=>JSON.parse(v), text: async()=>v }
+                 : { ok:false, status:404, json: async()=>({error:'nf'}), text: async()=>'{"error":"nf"}' };
+      }
       if(u.includes('/menu')){
         if(opts && opts.method === 'POST'){
           if(w.__menuPostFail) return { ok:false, status:500, json: async () => ({ error:'kv down' }) };
@@ -256,6 +267,32 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('mp-all').click(); await sleep(20);
   assert(w.eval('S.pourSelection===null') && [...d.querySelectorAll('#menu-body .prow .pn')].some(e=>e.textContent==='Sipsmith'), 'show-everything restores all pours');
 
+  // drink of the day/night (optional feature)
+  w.eval('openMenuPicker()'); await sleep(20);
+  d.getElementById('mp-feat').value = w.eval('S.recipes.find(r=>r.name==="Gimlet").id');
+  d.getElementById('mp-featlbl').value = 'drink of the day';
+  d.getElementById('mp-save').click(); await sleep(20);
+  const secs2 = [...d.querySelectorAll('#menu-body .msec')].map(e=>e.textContent);
+  assert(secs2[0]==='drink of the day', 'feature section tops the menu with your own label');
+  assert(d.querySelector('#menu-body .mitem.feature .mname').textContent.includes('Gimlet'), 'the chosen drink gets top billing');
+  assert([...d.querySelectorAll('#menu-body .mitem.house .mname')].every(e=>!e.textContent.includes('Gimlet')), 'featured drink is not repeated below');
+  const featLink = w.eval('buildMenuLink()');
+  const fPayload = JSON.parse(w.eval('JSON.stringify(parseMenuHash('+JSON.stringify('#m='+featLink.split('#m=')[1])+'))'));
+  assert(fPayload.f && fPayload.f.n==='Gimlet' && fPayload.f.label==='drink of the day', 'share payload carries the feature');
+  w.eval('openMenuPicker()'); await sleep(20);
+  d.getElementById('mp-feat').value = '';
+  d.getElementById('mp-save').click(); await sleep(20);
+  assert(w.eval('S.featureId')===null && d.querySelector('#menu-body .mitem.feature')===null, 'the feature is optional and switches off cleanly');
+
+  // 86'd: a drink whose bottle ran dry is struck through, not hidden
+  w.eval('S.bottles.find(b=>b.name==="Sipsmith").level="out"; renderMenu();'); await sleep(20);
+  const dead = [...d.querySelectorAll('#menu-body .mname.dead')].map(e=>e.textContent);
+  assert(dead.length>0 && dead.some(n=>n.includes('Gimlet')), 'an emptied bottle 86s its drinks instead of hiding them');
+  assert(d.querySelector('#menu-body .chip86')!==null, "86'd tag rendered next to the struck name");
+  assert(!dead.some(n=>n.includes('Manhattan')), 'drinks that were never stocked stay hidden, not 86d');
+  w.eval('S.bottles.find(b=>b.name==="Sipsmith").level="full"; renderMenu();'); await sleep(20);
+  assert(d.querySelectorAll('#menu-body .mname.dead').length===0, 'restocking clears the 86 marks');
+
   assert(d.querySelectorAll('#view-menu button').length===3, 'admin menu chrome is just curate + share + exit');
   d.getElementById('menu-exit').click(); await sleep(20);
   assert(!d.body.classList.contains('menuMode'), 'menu exit returns to admin');
@@ -345,6 +382,30 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('localStorage.clear(); S = fresh(); renderAll();');
   assert(w.eval('importJSON('+JSON.stringify(wlBackup)+')')===null, 'backup with wishlist imports');
   assert(w.eval('S.wishlist.length')===1 && w.eval('S.wishlist[0].img').startsWith('data:image') && w.eval('S.bottles.length')===bottleCount, 'wishlist photos survive the backup round-trip');
+
+  // --- tap an unlock -> wishlist ---
+  w.eval('setTab("tonight")');
+  let uwBtn = [...d.querySelectorAll('#unlock-list .uw')].find(b=>b.dataset.label==='orange liqueur');
+  assert(!!uwBtn, 'unlock rows offer a +wishlist button');
+  uwBtn.click(); await sleep(30);
+  assert(w.eval('S.wishlist.some(x=>x.name==="orange liqueur")'), 'tapping it adds the bottle to the wishlist');
+  uwBtn = [...d.querySelectorAll('#unlock-list .uw')].find(b=>b.dataset.label==='orange liqueur');
+  uwBtn.click(); await sleep(30);
+  assert(w.eval('S.wishlist.filter(x=>x.name==="orange liqueur").length')===1, 'tapping again does not duplicate');
+
+  // --- automatic cloud backup ---
+  w.eval('enableSync()'); await sleep(250);
+  const tok = w.eval('SYNC.token');
+  assert(/^[a-f0-9]{32}$/.test(tok), 'enabling cloud backup mints a 32-hex backup code');
+  assert(w.__syncStore && w.__syncStore[tok] && JSON.parse(w.__syncStore[tok]).v===1, 'state is pushed to the worker');
+  assert(JSON.parse(w.__syncStore[tok]).bottles.length===w.eval('S.bottles.length'), 'the pushed backup matches the live shelf');
+  const altCode = 'b'.repeat(32);
+  const alt = JSON.parse(w.eval('exportJSON()')); alt.menuTitle = 'Restored Bar';
+  w.__syncStore[altCode] = JSON.stringify(alt);
+  assert((await w.syncRestore(altCode))===null, 'restore-from-code succeeds');
+  assert(w.eval('S.menuTitle')==='Restored Bar' && w.eval('SYNC.token')===altCode, 'restore replaces state and adopts the new code');
+  assert(typeof (await w.syncRestore('not-a-code'))==='string', 'a malformed code is rejected politely');
+  assert(typeof (await w.syncRestore('c'.repeat(32)))==='string', 'an unknown code reports no backup found');
 
   // --- menu descriptions: capped auto + owner override ---
   w.upsertRecipe({ name:'Test Coquito', method:'blend', glass:'rocks', garnish:'', notes:'', rating:0, house:false,

@@ -24,6 +24,9 @@
  * GET  /menu/:id -> the stored payload as JSON (used by the app).
  * GET  /m/:id    -> a tiny HTML page with link-preview tags (title = menu
  *                   title) that forwards guests to the app.
+ * PUT  /sync     -> full app state in (Bearer <backup code>), stored in KV.
+ * GET  /sync     -> the stored state back (same Bearer code). Powers the
+ *                   app's automatic cloud backup / restore-on-new-phone.
  * The API key never leaves the worker.
  */
 
@@ -84,13 +87,14 @@ export default {
   async fetch(request, env) {
     const cors = {
       'access-control-allow-origin': env.ALLOWED_ORIGIN || '*',
-      'access-control-allow-methods': 'POST, OPTIONS',
-      'access-control-allow-headers': 'content-type',
+      'access-control-allow-methods': 'GET, POST, PUT, OPTIONS',
+      'access-control-allow-headers': 'content-type, authorization',
     };
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
     const path = new URL(request.url).pathname;
     if (path === '/scan' && request.method === 'POST') return scan(request, env, cors);
     if (path === '/recipe' && request.method === 'POST') return recipe(request, env, cors);
+    if (path === '/sync') return sync(request, env, cors);
     if (path === '/menu' && request.method === 'POST') return menuCreate(request, env, cors);
     const mGet = /^\/menu\/([A-Za-z0-9]{4,32})$/.exec(path);
     if (mGet && request.method === 'GET') return menuGet(mGet[1], env, cors);
@@ -237,6 +241,27 @@ async function recipe(request, env, cors) {
   return json({ recipe: parsed.recipe }, 200, cors);
 }
 
+/* ---- /sync : automatic cloud backup (bearer code = the only access control) ---- */
+async function sync(request, env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound — see the deploy steps at the top of this file' }, 500, cors);
+  const m = /^Bearer ([a-f0-9]{32,64})$/.exec(request.headers.get('authorization') || '');
+  if (!m) return json({ error: 'unauthorized' }, 401, cors);
+  const key = 'sync:' + m[1];
+  if (request.method === 'GET') {
+    const v = await env.MENUS.get(key);
+    if (!v) return json({ error: 'no backup found for this code' }, 404, cors);
+    return new Response(v, { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', ...cors } });
+  }
+  if (request.method === 'PUT') {
+    const body = await request.text();
+    if (body.length > 4 * 1024 * 1024) return json({ error: 'backup too large' }, 413, cors);
+    try { JSON.parse(body); } catch (e) { return json({ error: 'body is not JSON' }, 400, cors); }
+    await env.MENUS.put(key, body); // no TTL — backups persist
+    return json({ ok: true }, 200, cors);
+  }
+  return json({ error: 'method not allowed' }, 405, cors);
+}
+
 /* ---- /menu + /m : short shareable menu links (KV-backed, 90-day TTL) ---- */
 const MENU_TTL = 90 * 24 * 60 * 60;
 const APP_URL_DEFAULT = 'https://cjmerc39.github.io/home-bar/';
@@ -245,12 +270,21 @@ function cleanMenuPayload(p) {
   if (!p || typeof p.t !== 'string' || !Array.isArray(p.c) || !Array.isArray(p.s)) return null;
   const t = p.t.slice(0, 80);
   const c = p.c.slice(0, 100)
-    .map((x) => ({ n: String(x && x.n || '').slice(0, 80), d: String(x && x.d || '').slice(0, 300), h: !!(x && x.h) }))
+    .map((x) => {
+      const it = { n: String(x && x.n || '').slice(0, 80), d: String(x && x.d || '').slice(0, 300), h: !!(x && x.h) };
+      if (x && x.x) it.x = true; // 86'd
+      return it;
+    })
     .filter((x) => x.n);
   const s = p.s.slice(0, 100)
     .map((x) => ({ n: String(x && x.n || '').slice(0, 80), c: String(x && x.c || '').slice(0, 20), t: String(x && x.t || '').slice(0, 40) }))
     .filter((x) => x.n);
-  return { t, c, s };
+  const out = { t, c, s };
+  if (p.f && typeof p.f === 'object' && p.f.n) {
+    out.f = { label: String(p.f.label || 'drink of the night').slice(0, 60),
+      n: String(p.f.n).slice(0, 80), d: String(p.f.d || '').slice(0, 300), h: !!p.f.h };
+  }
+  return out;
 }
 function menuId() {
   const a = crypto.getRandomValues(new Uint8Array(8));

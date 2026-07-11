@@ -121,6 +121,10 @@ body.menuMode{padding-bottom:0}
 .mitem .mdesc{font-family:var(--serif);font-style:italic;font-size:14.5px;color:var(--mut);margin-top:4px}
 .mitem .housestar{margin-right:6px}
 .mcat{font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--brass2);margin:20px 0 12px}
+.mitem.feature{border:1px solid var(--brassdim);border-radius:12px;padding:18px 20px;max-width:420px}
+.mitem.feature .mname{font-size:27px}
+.mname.dead{text-decoration:line-through;opacity:.55}
+.chip86{font-size:10px;letter-spacing:2px;color:var(--low);border:1px solid var(--low);border-radius:99px;padding:2px 8px;margin-left:8px;text-transform:uppercase;vertical-align:middle;text-decoration:none;display:inline-block}
 .prow{display:flex;align-items:baseline;gap:8px;max-width:400px;margin:0 auto 10px;text-align:left}
 .prow .pn{font-family:var(--serif);font-size:17px}
 .prow .dots{flex:1;border-bottom:1px dotted var(--brassdim);transform:translateY(-4px);min-width:24px}
@@ -226,8 +230,9 @@ const SCAN_URL = 'https://home-bar.cj13mercado.workers.dev/scan';
 const RECIPE_URL = 'https://home-bar.cj13mercado.workers.dev/recipe';
 const MENU_URL = 'https://home-bar.cj13mercado.workers.dev/menu';
 const MENU_PAGE = 'https://home-bar.cj13mercado.workers.dev/m/';
+const SYNC_URL = 'https://home-bar.cj13mercado.workers.dev/sync';
 const KEY = 'bar-v1';
-const CFG = { scanUrl: SCAN_URL, recipeUrl: RECIPE_URL, menuUrl: MENU_URL, menuPage: MENU_PAGE };   // mutable indirection so tests can disable AI features
+const CFG = { scanUrl: SCAN_URL, recipeUrl: RECIPE_URL, menuUrl: MENU_URL, menuPage: MENU_PAGE, syncUrl: SYNC_URL };   // mutable indirection so tests can disable pieces
 
 const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','other'];
 const SPIRITS = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy'];
@@ -345,7 +350,7 @@ function seedRecipes(){
 
 /* ============================== state ============================== */
 let S = null;
-function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null }; }
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night' }; }
 function load(){
   let raw = null;
   try{ raw = localStorage.getItem(KEY); }catch(e){}
@@ -365,11 +370,13 @@ function load(){
   if(!Array.isArray(d.wishlist)) d.wishlist = [];
   if(!Array.isArray(d.menuSelection)) d.menuSelection = null;
   if(!Array.isArray(d.pourSelection)) d.pourSelection = null;
+  if(typeof d.featureId !== 'string') d.featureId = null;
+  if(typeof d.featureLabel !== 'string' || !d.featureLabel.trim()) d.featureLabel = 'drink of the night';
   return d;
 }
 let _saveT = null;
 function save(){ clearTimeout(_saveT); _saveT = setTimeout(()=>{
-  try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); schedulePush(); }
   catch(e){ toast('Storage is full — remove a wishlist photo or export a backup.'); }
 }, 300); }
 function uid(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -544,6 +551,8 @@ function importJSON(text){
   if(!Array.isArray(d.wishlist)) d.wishlist = [];
   if(!Array.isArray(d.menuSelection)) d.menuSelection = null;
   if(!Array.isArray(d.pourSelection)) d.pourSelection = null;
+  if(typeof d.featureId !== 'string') d.featureId = null;
+  if(typeof d.featureLabel !== 'string' || !d.featureLabel.trim()) d.featureLabel = 'drink of the night';
   S = d; save(); renderAll(); return null;
 }
 function downloadBackup(){
@@ -553,6 +562,52 @@ function downloadBackup(){
   a.download = 'home-bar-backup.json';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+}
+
+/* ============================== cloud backup (sync) ============================== */
+const SYNC_KEY = 'bar-v1-sync';
+let SYNC = (function(){ try{ const d = JSON.parse(localStorage.getItem(SYNC_KEY)||'null'); if(d && typeof d.token === 'string') return d; }catch(e){} return null; })();
+function saveSyncMeta(){ try{ localStorage.setItem(SYNC_KEY, JSON.stringify(SYNC)); }catch(e){} }
+function newSyncToken(){
+  try{
+    const a = crypto.getRandomValues(new Uint8Array(16));
+    return [...a].map(b => b.toString(16).padStart(2,'0')).join('');
+  }catch(e){
+    let s = ''; for(let i=0;i<32;i++) s += Math.floor(Math.random()*16).toString(16); return s;
+  }
+}
+function enableSync(){
+  if(!SYNC){ SYNC = { token: newSyncToken(), last: 0 }; saveSyncMeta(); }
+  schedulePush(true);
+}
+let _pushT = null;
+function schedulePush(now){
+  if(!SYNC || !CFG.syncUrl) return;
+  clearTimeout(_pushT); _pushT = setTimeout(syncPush, now ? 50 : 4000);
+}
+async function syncPush(){
+  if(!SYNC || !CFG.syncUrl) return;
+  try{
+    const r = await fetch(CFG.syncUrl, { method:'PUT',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + SYNC.token },
+      body: JSON.stringify(S) });
+    if(r.ok){ SYNC.last = Date.now(); saveSyncMeta(); }
+  }catch(e){} // offline is fine — next save retries
+}
+async function syncRestore(code){
+  code = String(code||'').trim().toLowerCase();
+  if(!/^[a-f0-9]{32,64}$/.test(code)) return 'That doesn’t look like a backup code.';
+  if(!CFG.syncUrl) return 'Cloud backup isn’t configured.';
+  let r, text;
+  try{
+    r = await fetch(CFG.syncUrl, { headers:{ 'Authorization':'Bearer ' + code } });
+    text = await r.text();
+  }catch(e){ return 'Could not reach the backup service.'; }
+  if(!r.ok) return 'No backup found for that code.';
+  const err = importJSON(text);
+  if(err) return err;
+  SYNC = { token: code, last: Date.now() }; saveSyncMeta();
+  return null;
 }
 
 /* ============================== scan ============================== */
@@ -805,10 +860,18 @@ function renderTonight(){
   mkEl.querySelectorAll('.tonight-item').forEach(el => el.addEventListener('click', () => openRecipeDetail(el.dataset.id)));
 
   const groups = unlockGroups();
-  document.getElementById('unlock-list').innerHTML = groups.length ? groups.map(g =>
-    '<div class="card unlock"><span class="buy">Buy ' + esc(g.label) + '</span>' +
-    ' <span class="mut">&rarr; unlocks ' + esc(g.recipes.join(', ')) + ' (' + g.recipes.length + ')</span></div>'
+  const unlockEl = document.getElementById('unlock-list');
+  unlockEl.innerHTML = groups.length ? groups.map(g =>
+    '<div class="card unlock rowline"><div class="grow"><span class="buy">Buy ' + esc(g.label) + '</span>' +
+    ' <span class="mut">&rarr; unlocks ' + esc(g.recipes.join(', ')) + ' (' + g.recipes.length + ')</span></div>' +
+    '<button class="abtn ghost uw" data-label="' + esc(g.label) + '" style="padding:6px 10px;font-size:12px;white-space:nowrap">+ wishlist</button></div>'
   ).join('') : '<div class="card dim">No single-bottle unlocks right now.</div>';
+  unlockEl.querySelectorAll('.uw').forEach(btn => btn.addEventListener('click', () => {
+    const label = btn.dataset.label;
+    if(S.wishlist.some(x => norm(x.name) === norm(label))){ toast('Already on the wishlist.'); return; }
+    upsertWish({ name: label, notes: 'from the unlocks list' });
+    toast('Added to the wishlist.');
+  }));
 
   const shop = [];
   for(const g of groups) shop.push('<div class="shopline"><span class="brass">&#9679;</span><span>' + esc(g.label) + ' <span class="dim small">unlocks ' + g.recipes.length + '</span></span></div>');
@@ -827,6 +890,16 @@ function renderTonight(){
 }
 let sharedMenu = null; // payload from a shared link (read-only guest view)
 const POUR_CATS = SPIRITS.concat(['amaro']);
+// a drink is 86'd when everything it lacks is a bottle that IS on the shelf but ran dry
+function is86d(r){
+  const st = recipeStatus(r);
+  if(st.makeable || !st.missing.length) return false;
+  return st.missing.every(m => {
+    if(m.req.bottleId){ const b = S.bottles.find(x => x.id === m.req.bottleId); return !!b && b.level === 'out'; }
+    if(m.req.tag) return S.bottles.some(b => b.level === 'out' && bottleMatchesTag(b, m.req.tag));
+    return false;
+  });
+}
 function menuPayload(){
   const items = [];
   for(const r of S.recipes){
@@ -835,14 +908,25 @@ function menuPayload(){
     items.push(r);
   }
   items.sort((a,z) => (z.house?1:0) - (a.house?1:0) || (z.rating||0) - (a.rating||0) || a.name.localeCompare(z.name));
+  let f = null;
+  if(S.featureId){
+    const i = items.findIndex(r => r.id === S.featureId);
+    if(i >= 0){
+      const fr = items.splice(i, 1)[0];
+      f = { label: S.featureLabel || 'drink of the night', n: fr.name, d: menuDescFor(fr), h: !!fr.house };
+    }
+  }
+  const c = items.map(r => ({ n:r.name, d:menuDescFor(r), h:!!r.house }));
+  for(const r of S.recipes){ // 86'd drinks stay on the menu, struck through
+    if(S.menuSelection && !S.menuSelection.includes(r.id)) continue;
+    if(is86d(r)) c.push({ n:r.name, d:menuDescFor(r), h:!!r.house, x:true });
+  }
   const pours = S.bottles.filter(b => b.level !== 'out' && POUR_CATS.includes(b.category)
       && (!S.pourSelection || S.pourSelection.includes(b.id)))
     .sort((a,z) => POUR_CATS.indexOf(a.category) - POUR_CATS.indexOf(z.category) || a.name.localeCompare(z.name));
-  return {
-    t: S.menuTitle,
-    c: items.map(r => ({ n:r.name, d:menuDescFor(r), h:!!r.house })),
-    s: pours.map(b => ({ n:b.name, c:b.category, t:norm(b.subtype||'') })),
-  };
+  const payload = { t: S.menuTitle, c, s: pours.map(b => ({ n:b.name, c:b.category, t:norm(b.subtype||'') })) };
+  if(f) payload.f = f;
+  return payload;
 }
 function renderMenu(){
   const p = sharedMenu || menuPayload();
@@ -852,17 +936,23 @@ function renderMenu(){
   if(!sharedMenu) createMenuLink(); // pre-warm the short link so the share sheet opens instantly
   const html = ['<div class="menu-head">', esc(p.t), '</div>',
     '<hr class="menu-rule"><div class="menu-sub">this evening’s pours</div>'];
-  if(!p.c.length && !p.s.length) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
+  if(!p.c.length && !p.s.length && !p.f) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
+  const mline = (r, extraCls) =>
+    '<div class="mitem' + (extraCls||'') + '"><div class="mname' + (r.x ? ' dead' : '') + '">' +
+    (r.h ? '<span class="housestar">★</span>' : '') + esc(r.n) +
+    (r.x ? ' <span class="chip86">86&rsquo;d</span>' : '') + '</div>' +
+    '<div class="mdesc">' + esc(r.d) + '</div></div>';
+  if(p.f){
+    html.push('<div class="msec">', esc(p.f.label), '</div>', mline(p.f, ' feature'));
+  }
   const houseItems = p.c.filter(r => r.h), restItems = p.c.filter(r => !r.h);
   if(houseItems.length){
     html.push('<div class="msec">house specialties</div>');
-    for(const r of houseItems) html.push('<div class="mitem house"><div class="mname"><span class="housestar">★</span>', esc(r.n), '</div>',
-      '<div class="mdesc">', esc(r.d), '</div></div>');
+    for(const r of houseItems) html.push(mline(r, ' house'));
   }
   if(restItems.length){
     html.push('<div class="msec">cocktails</div>');
-    for(const r of restItems) html.push('<div class="mitem"><div class="mname">', esc(r.n), '</div>',
-      '<div class="mdesc">', esc(r.d), '</div></div>');
+    for(const r of restItems) html.push(mline(r, ''));
   }
   if(p.s.length){
     html.push('<div class="msec">by the pour</div>');
@@ -932,10 +1022,15 @@ function openMenuPicker(){
     (r.house ? '<span class="housestar">★</span> ' : '') + esc(r.name))).join('');
   const pRows = stockedPours.map(b => ckRow('mp-pk', b.id, !S.pourSelection || S.pourSelection.includes(b.id),
     esc(b.name) + (b.subtype ? ' <span class="dim small">' + esc(b.subtype) + '</span>' : ''))).join('');
+  const featOpts = '<option value="">— none —</option>' + makeable.map(r =>
+    '<option value="' + r.id + '"' + (S.featureId === r.id ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('');
   openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>On tonight&rsquo;s menu</h2>' +
     '<div class="small mut" style="margin-bottom:8px">Untick anything you&rsquo;d rather not offer. With no saved selection, everything appears automatically.</div>' +
     (cRows ? '<div class="fieldlbl">Cocktails</div>' + cRows : '') +
     (pRows ? '<div class="fieldlbl">By the pour</div>' + pRows : '') +
+    (makeable.length ? '<div class="fieldlbl">Tonight&rsquo;s feature <span class="dim">(optional — gets top billing)</span></div>' +
+      '<select id="mp-feat">' + featOpts + '</select>' +
+      '<input id="mp-featlbl" value="' + esc(S.featureLabel || 'drink of the night') + '" placeholder="drink of the night" style="margin-top:6px">' : '') +
     '<div style="display:flex;gap:8px;margin-top:14px"><button class="abtn ghost" id="mp-all">Show everything</button>' +
     '<button class="abtn" id="mp-save" style="flex:1">Save selection</button></div>');
   document.getElementById('mp-all').onclick = () => {
@@ -952,6 +1047,11 @@ function openMenuPicker(){
     if(pks.length){
       const pids = pks.filter(el => el.checked).map(el => el.dataset.id);
       S.pourSelection = pids.length === pks.length ? null : pids;
+    }
+    const featSel = document.getElementById('mp-feat');
+    if(featSel){
+      S.featureId = featSel.value || null;
+      S.featureLabel = document.getElementById('mp-featlbl').value.trim() || 'drink of the night';
     }
     save(); closeModal(); renderMenu();
   };
@@ -1167,10 +1267,32 @@ function openSettings(){
     '<div class="small mut" style="margin:4px 0 10px">Your bar lives only in this browser — export a backup now and then.</div>' +
     '<div style="display:flex;gap:8px"><button class="abtn ghost" id="st-export" style="flex:1">Export JSON</button>' +
     '<button class="abtn ghost" id="st-import" style="flex:1">Import JSON</button></div>' +
+    (CFG.syncUrl ? '<hr class="sep"><h3 class="serif" style="color:var(--brass2)">Cloud backup</h3>' +
+      (SYNC
+        ? '<div class="small mut" style="margin:4px 0 6px">On — every change backs up automatically.</div>' +
+          '<label class="fieldlbl">Your backup code — tap to copy, keep it somewhere safe</label>' +
+          '<div class="card" id="st-code" style="font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all;cursor:pointer">' + esc(SYNC.token) + '</div>'
+        : '<div class="small mut" style="margin:4px 0 10px">Keeps a live copy of the whole bar on your worker, so a new phone restores everything with one code.</div>' +
+          '<button class="abtn ghost" id="st-sync-on" style="width:100%">Turn on cloud backup</button>') +
+      '<label class="fieldlbl">Restore from a backup code</label>' +
+      '<div style="display:flex;gap:8px"><input id="st-restore" placeholder="paste code"><button class="abtn ghost" id="st-restore-go">Restore</button></div>'
+    : '') +
     '<hr class="sep"><button class="abtn danger" id="st-reset" style="width:100%">Reset everything</button>' +
     '<button class="abtn" id="st-done" style="width:100%;margin-top:10px">Done</button>');
   document.getElementById('st-export').onclick = downloadBackup;
   document.getElementById('st-import').onclick = () => document.getElementById('import-file').click();
+  const syncOn = document.getElementById('st-sync-on');
+  if(syncOn) syncOn.onclick = () => { enableSync(); openSettings(); toast('Cloud backup is on — copy your code and keep it safe.'); };
+  const codeEl = document.getElementById('st-code');
+  if(codeEl) codeEl.onclick = () => {
+    try{ navigator.clipboard.writeText(SYNC.token).then(()=>toast('Backup code copied.')); }catch(e){ toast('Long-press to copy the code.'); }
+  };
+  const restoreGo = document.getElementById('st-restore-go');
+  if(restoreGo) restoreGo.onclick = async () => {
+    const err = await syncRestore(document.getElementById('st-restore').value);
+    if(err){ toast(err); return; }
+    closeModal(); toast('Restored from the cloud backup.');
+  };
   document.getElementById('st-reset').onclick = () => {
     if(confirm('Wipe every bottle, recipe edit, and setting?')){
       S = fresh(); save(); closeModal(); renderAll(); toast('Fresh start.');
