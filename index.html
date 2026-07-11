@@ -253,7 +253,7 @@ const SUBTYPES = {
   other:[]
 };
 const DEFAULT_STAPLES = ['lime','lemon','sugar','simple syrup','honey','agave syrup','egg white','mint','salt','espresso','coconut cream','cream'];
-const UNITS = ['oz','ml','dash','tsp','bsp','drop','leaf','wedge','pinch','rinse','top','whole'];
+const UNITS = ['oz','ml','cup','gallon','dash','tsp','bsp','drop','leaf','wedge','pinch','rinse','top','whole'];
 const LEVELS = ['full','low','out'];
 
 // nicer display names for specific tag combos
@@ -465,6 +465,7 @@ function cycleLevel(id){
 function upsertRecipe(r){
   if(!r.id) r.id = uid('r');
   r.name = (r.name||'').trim();
+  r.servings = Math.max(1, Math.min(999, parseInt(r.servings, 10) || 1));
   if(!r.name || !Array.isArray(r.ingredients) || !r.ingredients.length) return null;
   const i = S.recipes.findIndex(x => x.id === r.id);
   if(i >= 0) S.recipes[i] = r; else S.recipes.push(r);
@@ -735,6 +736,7 @@ function convertAiRecipe(rec){
   }
   return { name: String(rec.name||'').trim(), method: ['stir','shake','build','blend'].includes(rec.method) ? rec.method : 'shake',
     glass: String(rec.glass||''), garnish: String(rec.garnish||''), notes: String(rec.notes||''),
+    servings: Math.max(1, Math.min(999, parseInt(rec.servings, 10) || 1)),
     rating: 0, house: false, ingredients: ings.length ? ings : [null] };
 }
 async function aiDraft(payload){
@@ -1121,22 +1123,29 @@ function openBottleForm(id){
   const del = document.getElementById('bf-del');
   if(del) del.onclick = () => { if(confirm('Remove this bottle?')){ deleteBottle(id); closeModal(); } };
 }
+function scaleQty(q, f){
+  const n = parseFloat(q);
+  if(!isFinite(n) || f === 1) return q;
+  return String(Math.round(n * f * 100) / 100);
+}
 function openRecipeDetail(id){
   const r = S.recipes.find(x => x.id === id); if(!r) return;
-  const st = recipeStatus(r);
-  const missKeys = new Set(st.missing.map(m => m.status.key));
-  const ingHtml = r.ingredients.map(ing => {
+  const makes = r.servings || 1;
+  const ingLines = factor => r.ingredients.map(ing => {
     const s = reqStatus(ing.req);
     const flag = reqGates(ing.req) && !s.ok; // only alcohol bottles get called out
-    return '<div class="ing-line' + (flag ? ' miss' : '') + '"><span class="qty">' + esc(ing.qty||'') + ' ' + esc(ing.unit||'') + '</span>' +
+    return '<div class="ing-line' + (flag ? ' miss' : '') + '"><span class="qty">' + esc(scaleQty(ing.qty||'', factor)) + ' ' + esc(ing.unit||'') + '</span>' +
       '<span class="lbl">' + esc(ingLabel(ing)) + (ing.note ? ' <span class="dim small">(' + esc(ing.note) + ')</span>' : '') +
       (flag ? ' <span class="small" style="color:var(--bad)">missing</span>' : (s.ok && s.low ? ' <span class="lowtag">low</span>' : '')) + '</span></div>';
   }).join('');
   openModal('<button class="mclose" onclick="closeModal()">&times;</button>' +
     '<h2>' + (r.house?'<span class="housestar">★</span> ':'') + esc(r.name) + '</h2>' +
-    '<div class="detmeta">' + esc(r.method) + ' &middot; ' + esc(r.glass||'') + (r.garnish ? ' &middot; ' + esc(r.garnish) : '') + '</div>' +
+    '<div class="detmeta">' + esc(r.method) + ' &middot; ' + esc(r.glass||'') + (r.garnish ? ' &middot; ' + esc(r.garnish) : '') + ' &middot; makes ' + makes + '</div>' +
     '<div class="starpick" id="rd-stars">' + [1,2,3,4,5].map(i => '<span data-s="' + i + '" class="' + (i<=(r.rating||0)?'lit':'') + '">★</span>').join('') + '</div>' +
-    '<hr class="sep">' + ingHtml +
+    '<hr class="sep">' +
+    '<div class="rowline" style="margin-bottom:8px;gap:8px"><span class="small mut">Scale for</span>' +
+    '<input id="rd-scale" type="number" min="1" value="' + makes + '" style="max-width:80px"><span class="small mut">drink' + (makes===1?'':'s') + '</span></div>' +
+    '<div id="rd-ings">' + ingLines(1) + '</div>' +
     '<label class="fieldlbl">Notes</label><textarea id="rd-notes" rows="2">' + esc(r.notes||'') + '</textarea>' +
     '<label class="fieldlbl">Menu description <span class="dim">(what guests see — blank = automatic)</span></label>' +
     '<input id="rd-mdesc" value="' + esc(r.menuDesc||'') + '" placeholder="' + esc(autoDesc(r)) + '">' +
@@ -1154,6 +1163,10 @@ function openRecipeDetail(id){
   document.getElementById('rd-house').addEventListener('change', e => { r.house = e.target.checked; save(); });
   document.getElementById('rd-notes').addEventListener('change', e => { r.notes = e.target.value; save(); });
   document.getElementById('rd-mdesc').addEventListener('change', e => { r.menuDesc = e.target.value.trim(); save(); });
+  document.getElementById('rd-scale').addEventListener('input', e => {
+    const target = Math.max(1, parseInt(e.target.value, 10) || makes);
+    document.getElementById('rd-ings').innerHTML = ingLines(target / makes);
+  });
   document.getElementById('rd-done').onclick = () => { closeModal(); renderAll(); };
   document.getElementById('rd-edit').onclick = () => openRecipeForm(id);
   document.getElementById('rd-del').onclick = () => { if(confirm('Delete this recipe?')){ deleteRecipe(id); closeModal(); } };
@@ -1182,7 +1195,12 @@ function ingBodyHtml(kind, req, cat){
   }
   if(kind === 'bottleId'){
     if(!S.bottles.length) return '<div class="dim small" style="padding:8px 2px">No bottles on the shelf yet.</div>';
-    return '<select class="ir-bottle">' + S.bottles.map(b => '<option value="' + b.id + '"' + (req.bottleId===b.id?' selected':'') + '>' + esc(b.name) + '</option>').join('') + '</select>';
+    // type-to-search with sorted suggestions, not a raw dropdown
+    const cur = req.bottleId ? ((S.bottles.find(b => b.id === req.bottleId) || {}).name || '') : '';
+    const listId = 'dl-bt-' + Math.random().toString(36).slice(2,7);
+    return '<span style="flex:1"><input class="ir-bottle" list="' + listId + '" placeholder="start typing a bottle…" value="' + esc(cur) + '">' +
+      '<datalist id="' + listId + '">' + S.bottles.slice().sort((a,z)=>a.name.localeCompare(z.name))
+        .map(b => '<option value="' + esc(b.name) + '">').join('') + '</datalist></span>';
   }
   return catSelect('ir-cat', cat) + subInput('ir-sub', cat, req.tag && req.tag.subtype || '');
 }
@@ -1198,6 +1216,7 @@ function openRecipeForm(id, pre){
     '<div class="formrow"><span><label class="fieldlbl">Method</label><select id="rf-method">' + ['stir','shake','build','blend'].map(m => '<option' + (m===r.method?' selected':'') + '>' + m + '</option>').join('') + '</select></span>' +
     '<span><label class="fieldlbl">Glass</label><input id="rf-glass" value="' + esc(r.glass||'') + '" placeholder="coupe, rocks…"></span></div>' +
     '<label class="fieldlbl">Garnish</label><input id="rf-garnish" value="' + esc(r.garnish||'') + '">' +
+    '<label class="fieldlbl">Makes <span class="dim">(drinks)</span></label><input id="rf-servings" type="number" min="1" value="' + (r.servings||1) + '" style="max-width:110px">' +
     '<label class="fieldlbl">Ingredients</label><div id="rf-ings">' + r.ingredients.map(ingRowHtml).join('') + '</div>' +
     '<button class="abtn ghost" id="rf-adding" style="width:100%">+ ingredient</button>' +
     '<label class="fieldlbl">Notes</label><textarea id="rf-notes" rows="2">' + esc(r.notes||'') + '</textarea>' +
@@ -1235,11 +1254,19 @@ function openRecipeForm(id, pre){
   };
   document.getElementById('rf-save').onclick = () => {
     const ingredients = [];
+    let badBottle = null;
     ings.querySelectorAll('.ingrow').forEach(row => {
       const kind = row.querySelector('.ir-kind').value;
       let req = null;
       if(kind === 'staple'){ const el = row.querySelector('.ir-staple'); if(el && el.value.trim()) req = { staple: el.value.trim() }; }
-      else if(kind === 'bottleId'){ const el = row.querySelector('.ir-bottle'); if(el) req = { bottleId: el.value }; }
+      else if(kind === 'bottleId'){
+        const el = row.querySelector('.ir-bottle');
+        if(el){
+          const b = S.bottles.find(x => norm(x.name) === norm(el.value));
+          if(!b){ badBottle = el.value.trim(); return; }
+          req = { bottleId: b.id };
+        }
+      }
       else {
         const cat = row.querySelector('.ir-cat').value, sub = row.querySelector('.ir-sub').value.trim();
         req = sub ? { tag:{ category:cat, subtype:sub } } : { tag:{ category:cat } };
@@ -1249,7 +1276,12 @@ function openRecipeForm(id, pre){
       const note = row.querySelector('.ir-note').value.trim(); if(note) ing.note = note;
       ingredients.push(ing);
     });
+    if(badBottle !== null){
+      toast(badBottle ? 'No bottle called “' + badBottle + '” on the shelf — pick one from the suggestions.' : 'Pick a bottle for the “specific bottle” ingredient.');
+      return;
+    }
     const ok = upsertRecipe({ id: id || undefined, name: document.getElementById('rf-name').value,
+      servings: document.getElementById('rf-servings').value,
       method: document.getElementById('rf-method').value, glass: document.getElementById('rf-glass').value.trim(),
       garnish: document.getElementById('rf-garnish').value.trim(), notes: document.getElementById('rf-notes').value,
       menuDesc: document.getElementById('rf-mdesc').value.trim(),

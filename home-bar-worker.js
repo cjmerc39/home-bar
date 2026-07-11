@@ -31,7 +31,7 @@
  */
 
 const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','other'];
-const UNITS = ['oz','ml','dash','tsp','bsp','drop','leaf','wedge','pinch','rinse','top','whole'];
+const UNITS = ['oz','ml','cup','gallon','dash','tsp','bsp','drop','leaf','wedge','pinch','rinse','top','whole'];
 const METHODS = ['stir','shake','build','blend'];
 const DEFAULT_STAPLES = ['lime','lemon','sugar','simple syrup','honey','agave syrup','egg white','mint','salt','espresso','coconut cream','cream'];
 const IMAGE_TYPES = ['image/jpeg','image/png','image/webp'];
@@ -157,6 +157,7 @@ const RECIPE_SCHEMA = {
         glass: { type: 'string' },
         garnish: { type: 'string' },
         notes: { type: 'string' },
+        servings: { type: 'integer' },
         ingredients: {
           type: 'array',
           items: {
@@ -192,6 +193,7 @@ function recipePrompt(staples) {
     'Everything alcoholic or bottled from a store is kind:"tag" with a category from the allowed list and, ' +
     'when meaningful, a lowercase subtype following these conventions: ' + SUBTYPE_CONVENTIONS + ' ' +
     'qty is a plain decimal string like "0.75". Keep glass and garnish short. Put technique tips in notes. ' +
+    'Set servings to how many drinks the spec makes as written (1 for a single cocktail; batch recipes like coquito often make 8-12). ' +
     'If the source names a specific brand, put the generic tag in the ingredient and mention the brand in notes.';
 }
 

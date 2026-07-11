@@ -160,8 +160,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await sleep(20);
   ir.querySelector('.ir-staple').value = 'coconut cream';
   d.getElementById('rf-house').checked = true;
+  d.getElementById('rf-servings').value = '2';
   d.getElementById('rf-save').click(); await sleep(30);
   assert(w.eval('S.recipes.length')===35 && w.eval('S.recipes.some(r=>r.name==="House Coquito" && r.house===true)'), 'recipe form saves a new house recipe');
+  assert(w.eval('S.recipes.find(r=>r.name==="House Coquito").servings')===2, 'the makes-N-drinks field saves');
   assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="House Coquito")).makeable')===true, 'staple-only recipe is immediately makeable');
   const coqId = w.eval('S.recipes.find(r=>r.name==="House Coquito").id');
   w.eval('openRecipeDetail("'+coqId+'")'); await sleep(20);
@@ -359,6 +361,38 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('rf-save').click(); await sleep(30);
   assert(w.eval('S.recipes.some(r=>r.name==="Division Bell")'), 'drafted recipe saves like any other');
   w.eval('deleteRecipe(S.recipes.find(r=>r.name==="Division Bell").id)');
+
+  // --- specific-bottle type-to-search ---
+  d.getElementById('btn-addrecipe').click(); await sleep(30);
+  const brow = d.querySelector('#rf-ings .ingrow');
+  brow.querySelector('.ir-kind').value = 'bottleId';
+  brow.querySelector('.ir-kind').dispatchEvent(new w.Event('change')); await sleep(20);
+  const opts = [...brow.querySelectorAll('datalist option')].map(o=>o.value);
+  assert(opts.length===w.eval('S.bottles.length') && opts[0]==='Amaro Nonino Quintessentia', 'bottle picker is a sorted type-to-search list');
+  d.getElementById('rf-name').value = 'Bottle Test';
+  brow.querySelector('.ir-qty').value = '2';
+  brow.querySelector('.ir-bottle').value = 'nonexistent bottle';
+  d.getElementById('rf-save').click(); await sleep(30);
+  assert(!w.eval('S.recipes.some(r=>r.name==="Bottle Test")') && d.getElementById('modalwrap').classList.contains('on'), 'an unknown bottle name blocks the save with the form intact');
+  brow.querySelector('.ir-bottle').value = 'campari bitter';
+  d.getElementById('rf-save').click(); await sleep(30);
+  const bt = 'S.recipes.find(r=>r.name==="Bottle Test")';
+  assert(w.eval(bt+'.ingredients[0].req.bottleId')===w.eval('S.bottles.find(b=>b.name==="Campari Bitter").id'), 'a typed name resolves to the bottle id, case-insensitively');
+
+  // --- servings + portion scaling ---
+  assert(w.eval('UNITS.includes("cup") && UNITS.includes("gallon")'), 'cup and gallon are valid units');
+  w.upsertRecipe({ name:'Batch Test', method:'stir', glass:'pitcher', garnish:'', notes:'', rating:0, house:false, servings:2,
+    ingredients:[ { qty:'1.5', unit:'cup', req:{ staple:'coconut cream' } }, { qty:'4', unit:'oz', req:{ tag:{ category:'rum', subtype:'aged' } } } ] });
+  w.eval('openRecipeDetail(S.recipes.find(r=>r.name==="Batch Test").id)'); await sleep(20);
+  assert(d.querySelector('#modal .detmeta').textContent.includes('makes 2'), 'detail sheet shows how many drinks the spec makes');
+  d.getElementById('rd-scale').value = '20';
+  d.getElementById('rd-scale').dispatchEvent(new w.Event('input')); await sleep(20);
+  const qtys = [...d.querySelectorAll('#rd-ings .qty')].map(e=>e.textContent.trim());
+  assert(qtys[0]==='15 cup' && qtys[1]==='40 oz', 'scaling 2 -> 20 drinks multiplies every quantity by 10');
+  d.getElementById('rd-scale').value = '3';
+  d.getElementById('rd-scale').dispatchEvent(new w.Event('input')); await sleep(20);
+  assert([...d.querySelectorAll('#rd-ings .qty')][0].textContent.trim()==='2.25 cup', 'fractional scaling rounds sensibly');
+  w.eval('closeModal(); deleteRecipe(S.recipes.find(r=>r.name==="Batch Test").id); deleteRecipe(S.recipes.find(r=>r.name==="Bottle Test").id);');
 
   // --- wishlist with photos ---
   w.eval('setTab("tonight")');
