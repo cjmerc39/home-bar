@@ -10,9 +10,20 @@
  *   5. Optional but recommended: add variable
  *        ALLOWED_ORIGIN = https://cjmerc39.github.io
  *
- * POST /scan   -> { media_type, data } in (base64 image), { bottles: [...] } out.
- * POST /recipe -> { text } or { media_type, data } (+ optional staples[]) in,
- *                 { recipe: {...} } out — drafts a structured cocktail spec.
+ * For short shareable menu links (POST /menu, GET /m/<id>) you ALSO need a
+ * KV namespace (a tiny key-value store, free tier):
+ *   6. dash.cloudflare.com -> Storage & Databases -> KV -> Create namespace,
+ *      name it "home-bar-menus"
+ *   7. Worker -> Settings -> Bindings -> Add -> KV namespace ->
+ *      Variable name: MENUS, Namespace: home-bar-menus -> Save
+ *
+ * POST /scan     -> { media_type, data } in (base64 image), { bottles: [...] } out.
+ * POST /recipe   -> { text } or { media_type, data } (+ optional staples[]) in,
+ *                   { recipe: {...} } out — drafts a structured cocktail spec.
+ * POST /menu     -> menu payload in, { id } out (stored 90 days in KV).
+ * GET  /menu/:id -> the stored payload as JSON (used by the app).
+ * GET  /m/:id    -> a tiny HTML page with link-preview tags (title = menu
+ *                   title) that forwards guests to the app.
  * The API key never leaves the worker.
  */
 
@@ -80,6 +91,11 @@ export default {
     const path = new URL(request.url).pathname;
     if (path === '/scan' && request.method === 'POST') return scan(request, env, cors);
     if (path === '/recipe' && request.method === 'POST') return recipe(request, env, cors);
+    if (path === '/menu' && request.method === 'POST') return menuCreate(request, env, cors);
+    const mGet = /^\/menu\/([A-Za-z0-9]{4,32})$/.exec(path);
+    if (mGet && request.method === 'GET') return menuGet(mGet[1], env, cors);
+    const mPage = /^\/m\/([A-Za-z0-9]{4,32})$/.exec(path);
+    if (mPage && request.method === 'GET') return menuPage(mPage[1], env);
     return json({ error: 'not found' }, 404, cors);
   },
 };
@@ -218,6 +234,78 @@ async function recipe(request, env, cors) {
   try { parsed = JSON.parse(out); } catch (e) { return json({ error: 'could not parse model output' }, 502, cors); }
   if (!parsed || !parsed.recipe) return json({ error: 'no recipe in model output' }, 502, cors);
   return json({ recipe: parsed.recipe }, 200, cors);
+}
+
+/* ---- /menu + /m : short shareable menu links (KV-backed, 90-day TTL) ---- */
+const MENU_TTL = 90 * 24 * 60 * 60;
+const APP_URL_DEFAULT = 'https://cjmerc39.github.io/home-bar/';
+
+function cleanMenuPayload(p) {
+  if (!p || typeof p.t !== 'string' || !Array.isArray(p.c) || !Array.isArray(p.s)) return null;
+  const t = p.t.slice(0, 80);
+  const c = p.c.slice(0, 100)
+    .map((x) => ({ n: String(x && x.n || '').slice(0, 80), d: String(x && x.d || '').slice(0, 300), h: !!(x && x.h) }))
+    .filter((x) => x.n);
+  const s = p.s.slice(0, 100)
+    .map((x) => ({ n: String(x && x.n || '').slice(0, 80), c: String(x && x.c || '').slice(0, 20), t: String(x && x.t || '').slice(0, 40) }))
+    .filter((x) => x.n);
+  return { t, c, s };
+}
+function menuId() {
+  const a = crypto.getRandomValues(new Uint8Array(8));
+  return [...a].map((b) => (b % 36).toString(36)).join('');
+}
+async function menuCreate(request, env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound — see the deploy steps at the top of this file' }, 500, cors);
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: 'bad request body' }, 400, cors); }
+  const clean = cleanMenuPayload(body);
+  if (!clean) return json({ error: 'not a menu payload' }, 400, cors);
+  const blob = JSON.stringify(clean);
+  if (blob.length > 32768) return json({ error: 'menu too large' }, 413, cors);
+  const id = menuId();
+  await env.MENUS.put('m:' + id, blob, { expirationTtl: MENU_TTL });
+  return json({ id }, 200, cors);
+}
+async function menuGet(id, env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  const v = await env.MENUS.get('m:' + id);
+  if (!v) return json({ error: 'menu expired' }, 404, cors);
+  return new Response(v, {
+    status: 200,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=3600', ...cors },
+  });
+}
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+async function menuPage(id, env) {
+  const appUrl = env.APP_URL || APP_URL_DEFAULT;
+  const v = env.MENUS ? await env.MENUS.get('m:' + id) : null;
+  const headers = { 'content-type': 'text/html; charset=utf-8' };
+  if (!v) {
+    return new Response('<!doctype html><meta charset="utf-8"><title>Menu expired</title>' +
+      '<body style="background:#1a1410;color:#b7a789;font-family:Georgia,serif;text-align:center;padding-top:30vh">' +
+      'This menu link has expired.<br><a style="color:#c9a15a" href="' + escHtml(appUrl) + '">Home Bar</a></body>', { status: 404, headers });
+  }
+  let p; try { p = JSON.parse(v); } catch (e) { p = { t: 'Menu', c: [], s: [] }; }
+  const names = p.c.slice(0, 3).map((x) => x.n).join(', ');
+  const desc = (p.c.length ? p.c.length + ' cocktail' + (p.c.length === 1 ? '' : 's') + ' tonight' + (names ? ' — ' + names + (p.c.length > 3 ? ' & more' : '') : '') : 'Tonight’s menu') +
+    (p.s.length ? ' · ' + p.s.length + ' by the pour' : '');
+  const target = appUrl + '#s=' + id;
+  return new Response('<!doctype html><html><head><meta charset="utf-8">' +
+    '<title>' + escHtml(p.t) + '</title>' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<meta property="og:title" content="' + escHtml(p.t) + '">' +
+    '<meta property="og:description" content="' + escHtml(desc) + '">' +
+    '<meta property="og:image" content="' + escHtml(appUrl) + 'icon-512.png">' +
+    '<meta property="og:type" content="website">' +
+    '<meta name="twitter:card" content="summary">' +
+    '</head><body style="background:#1a1410;color:#f1e6d0;font-family:Georgia,serif;text-align:center;padding-top:30vh">' +
+    'Opening ' + escHtml(p.t) + '&hellip;' +
+    '<script>location.replace(' + JSON.stringify(target) + ')</script>' +
+    '<noscript><br><a style="color:#c9a15a" href="' + escHtml(target) + '">Open the menu</a></noscript>' +
+    '</body></html>', { status: 200, headers });
 }
 
 function json(obj, status, headers) {

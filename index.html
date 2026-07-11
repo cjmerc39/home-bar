@@ -223,8 +223,10 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 /* ============================== config ============================== */
 const SCAN_URL = 'https://home-bar.cj13mercado.workers.dev/scan';
 const RECIPE_URL = 'https://home-bar.cj13mercado.workers.dev/recipe';
+const MENU_URL = 'https://home-bar.cj13mercado.workers.dev/menu';
+const MENU_PAGE = 'https://home-bar.cj13mercado.workers.dev/m/';
 const KEY = 'bar-v1';
-const CFG = { scanUrl: SCAN_URL, recipeUrl: RECIPE_URL };   // mutable indirection so tests can disable AI features
+const CFG = { scanUrl: SCAN_URL, recipeUrl: RECIPE_URL, menuUrl: MENU_URL, menuPage: MENU_PAGE };   // mutable indirection so tests can disable AI features
 
 const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','other'];
 const SPIRITS = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy'];
@@ -835,6 +837,7 @@ function renderMenu(){
   document.getElementById('menu-exit').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-share').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-curate').classList.toggle('hidden', !!sharedMenu);
+  if(!sharedMenu) createMenuLink(); // pre-warm the short link so the share sheet opens instantly
   const html = ['<div class="menu-head">', esc(p.t), '</div>',
     '<hr class="menu-rule"><div class="menu-sub">this evening’s pours</div>'];
   if(!p.c.length && !p.s.length) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
@@ -863,15 +866,42 @@ function renderMenu(){
 function b64uEncode(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
 function b64uDecode(s){ s = s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length % 4) s += '='; return decodeURIComponent(escape(atob(s))); }
 function buildMenuLink(){ return location.origin + location.pathname + '#m=' + b64uEncode(JSON.stringify(menuPayload())); }
+function validMenuPayload(p){ return !!(p && typeof p.t === 'string' && Array.isArray(p.c) && Array.isArray(p.s)); }
 function parseMenuHash(hash){
   const m = /^#m=(.+)$/.exec(hash || ''); if(!m) return null;
   try{
     const p = JSON.parse(b64uDecode(m[1]));
-    if(!p || typeof p.t !== 'string' || !Array.isArray(p.c) || !Array.isArray(p.s)) return null;
-    return p;
+    return validMenuPayload(p) ? p : null;
   }catch(e){ return null; }
 }
 function enterSharedMenu(p){ sharedMenu = p; setTab('menu'); }
+// short link: the worker stores the menu and serves /m/<id> with a proper
+// link preview (title = menu title). Falls back to the long #m= link.
+let _menuLink = { key:null, url:null };
+async function createMenuLink(){
+  const payload = menuPayload();
+  const key = JSON.stringify(payload);
+  if(_menuLink.key === key && _menuLink.url) return _menuLink.url;
+  let url = null;
+  if(CFG.menuUrl){
+    try{
+      const r = await fetch(CFG.menuUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: key });
+      const j = await r.json().catch(()=>null);
+      if(r.ok && j && /^[A-Za-z0-9]{4,32}$/.test(String(j.id||''))) url = CFG.menuPage + j.id;
+    }catch(e){}
+  }
+  if(!url) url = buildMenuLink();
+  _menuLink = { key, url };
+  return url;
+}
+async function loadSharedMenu(id){
+  try{
+    const r = await fetch(CFG.menuUrl + '/' + id);
+    const j = await r.json().catch(()=>null);
+    if(r.ok && validMenuPayload(j)){ enterSharedMenu(j); return; }
+  }catch(e){}
+  toast('That menu link has expired.');
+}
 function openMenuPicker(){
   const makeable = S.recipes.filter(r => recipeStatus(r).makeable).sort((a,z)=>a.name.localeCompare(z.name));
   if(!makeable.length){ toast('Nothing is makeable yet — stock the shelf first.'); return; }
@@ -895,11 +925,11 @@ function openMenuPicker(){
   };
 }
 async function shareMenu(){
-  const url = buildMenuLink();
+  const url = await createMenuLink(); // usually instant — pre-warmed when the menu renders
   try{
     if(navigator.share){ await navigator.share({ title: S.menuTitle, url }); return; }
     await navigator.clipboard.writeText(url);
-    toast('Menu link copied — text it to your guests.');
+    toast('Menu link copied — good for 90 days.');
   }catch(e){
     if(e && e.name === 'AbortError') return; // user closed the share sheet
     toast('Could not share the menu link.');
@@ -1162,7 +1192,12 @@ document.querySelectorAll('#tabbar button').forEach(b => b.addEventListener('cli
 document.getElementById('modalwrap').addEventListener('click', e => { if(e.target.id === 'modalwrap') closeModal(); });
 setTab('shelf');
 // opened via a shared-menu link? lock straight into the guest menu
-(function(){ const p = parseMenuHash(location.hash); if(p) enterSharedMenu(p); })();
+(function(){
+  const s = /^#s=([A-Za-z0-9]{4,32})$/.exec(location.hash);
+  if(s){ loadSharedMenu(s[1]); return; }
+  const p = parseMenuHash(location.hash);
+  if(p) enterSharedMenu(p);
+})();
 </script>
 </body>
 </html>

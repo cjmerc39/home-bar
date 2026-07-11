@@ -5,9 +5,17 @@ const errors = [];
 const dom = new JSDOM(html, {
   runScripts: 'dangerously', url: 'https://example.com/',
   beforeParse(w){ w.TextEncoder=TextEncoder; w.TextDecoder=TextDecoder; w.confirm=()=>true; w.scrollTo=()=>{};
-    w.fetch = async (url) => {
-      if(String(url).includes('/scan')) return { ok:true, status:200, json: async () => (w.__scanResult || { bottles: [] }) };
-      if(String(url).includes('/recipe')) return { ok:true, status:200, json: async () => (w.__recipeResult || { error:'no mock' }) };
+    w.fetch = async (url, opts) => {
+      const u = String(url);
+      if(u.includes('/scan')) return { ok:true, status:200, json: async () => (w.__scanResult || { bottles: [] }) };
+      if(u.includes('/recipe')) return { ok:true, status:200, json: async () => (w.__recipeResult || { error:'no mock' }) };
+      if(u.includes('/menu')){
+        if(opts && opts.method === 'POST'){
+          if(w.__menuPostFail) return { ok:false, status:500, json: async () => ({ error:'kv down' }) };
+          return { ok:true, status:200, json: async () => ({ id:'abc123' }) };
+        }
+        return { ok:true, status:200, json: async () => (w.__sharedPayload || { t:'X', c:[], s:[] }) };
+      }
       return { ok:false, status:404, json: async () => ({ error:'not found' }) };
     }; },
 });
@@ -188,6 +196,23 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const payload = JSON.parse(w.eval('JSON.stringify(parseMenuHash('+JSON.stringify(hash)+'))'));
   assert(payload && payload.t===w.eval('S.menuTitle') && payload.c.length===menuNames.length && payload.s.length===5, 'share payload round-trips title, cocktails, and pours');
   assert(w.eval('parseMenuHash("#m=!!!notvalid")')===null && w.eval('parseMenuHash("#nope")')===null, 'garbage share hashes are rejected');
+
+  // short link via the worker (KV-backed)
+  const shortUrl = await w.createMenuLink();
+  assert(shortUrl.endsWith('/m/abc123'), 'worker returns a short /m/ link');
+  assert((await w.createMenuLink())===shortUrl, 'short link is cached while the menu is unchanged');
+  w.eval('_menuLink={key:null,url:null}');
+  w.__menuPostFail = true;
+  assert((await w.createMenuLink()).includes('#m='), 'worker outage falls back to the long link');
+  w.__menuPostFail = false;
+  w.eval('_menuLink={key:null,url:null}');
+  w.__sharedPayload = { t:"Party at CJ's", c:[{ n:'Negroni', d:'gin, Campari, sweet vermouth', h:true }], s:[] };
+  await w.loadSharedMenu('abc123'); await sleep(20);
+  assert(d.body.classList.contains('menuMode') && d.querySelector('#menu-body .menu-head').textContent==="Party at CJ's",
+    'a short link loads the shared menu from the worker');
+  assert(d.getElementById('menu-share').classList.contains('hidden') && d.getElementById('menu-curate').classList.contains('hidden'),
+    'guest view from a short link hides admin chrome');
+  w.eval('sharedMenu=null; renderMenu();'); await sleep(20);
   w.eval('enterSharedMenu(parseMenuHash('+JSON.stringify(hash)+'))'); await sleep(20);
   assert(d.body.classList.contains('menuMode') && d.getElementById('menu-exit').classList.contains('hidden')
       && d.getElementById('menu-share').classList.contains('hidden') && d.getElementById('menu-curate').classList.contains('hidden'),
