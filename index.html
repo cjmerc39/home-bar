@@ -853,9 +853,15 @@ function renderMenu(){
   const html = ['<div class="menu-head">', esc(p.t), '</div>',
     '<hr class="menu-rule"><div class="menu-sub">this evening’s pours</div>'];
   if(!p.c.length && !p.s.length) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
-  if(p.c.length){
+  const houseItems = p.c.filter(r => r.h), restItems = p.c.filter(r => !r.h);
+  if(houseItems.length){
+    html.push('<div class="msec">house specialties</div>');
+    for(const r of houseItems) html.push('<div class="mitem house"><div class="mname"><span class="housestar">★</span>', esc(r.n), '</div>',
+      '<div class="mdesc">', esc(r.d), '</div></div>');
+  }
+  if(restItems.length){
     html.push('<div class="msec">cocktails</div>');
-    for(const r of p.c) html.push('<div class="mitem"><div class="mname">', r.h ? '<span class="housestar">★</span>' : '', esc(r.n), '</div>',
+    for(const r of restItems) html.push('<div class="mitem"><div class="mname">', esc(r.n), '</div>',
       '<div class="mdesc">', esc(r.d), '</div></div>');
   }
   if(p.s.length){

@@ -176,8 +176,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const makeableNames = JSON.parse(w.eval('JSON.stringify(S.recipes.filter(r=>recipeStatus(r).makeable).map(r=>r.name))'));
   assert(menuNames.length===makeableNames.length && menuNames.every(n=>makeableNames.some(m=>n.includes(m))), 'menu cocktails section lists exactly the makeable recipes');
 
-  // sections: cocktails + by the pour, grouped like a printed menu
-  assert(d.querySelectorAll('#menu-body .msec').length===2, 'menu has cocktails and by-the-pour sections');
+  // sections: house specialties + cocktails + by the pour, grouped like a printed menu
+  const secLabels = [...d.querySelectorAll('#menu-body .msec')].map(e=>e.textContent);
+  assert(secLabels.join()==='house specialties,cocktails,by the pour', 'house drinks get their own section at the top');
+  assert([...d.querySelectorAll('#menu-body .mitem.house .mname')].some(e=>e.textContent.includes('Gimlet'))
+      && ![...d.querySelectorAll('#menu-body .mitem:not(.house):not(.pour) .mname')].some(e=>e.textContent.includes('Gimlet')),
+      'a house drink lives only in the house section');
   const pourNames = [...d.querySelectorAll('#menu-body .prow .pn')].map(e=>e.textContent);
   assert(pourNames.length===5 && pourNames.includes('Sipsmith'), 'pour section lists the 5 stocked spirits & amari');
   const pourCats = [...d.querySelectorAll('#menu-body .mcat')].map(e=>e.textContent);
