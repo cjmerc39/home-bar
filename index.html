@@ -68,7 +68,9 @@ body.menuMode{padding-bottom:0}
 #shelf-tools{display:flex;gap:8px;margin:4px 0 14px}
 #shelf-tools input{flex:1}
 #shelf-tools .abtn{white-space:nowrap;padding:9px 13px}
-.cathead{font-size:12px;letter-spacing:2.2px;text-transform:uppercase;color:var(--dim);margin:16px 2px 7px}
+.cathead{font-size:12px;letter-spacing:2.2px;text-transform:uppercase;color:var(--dim);margin:16px 2px 7px;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.cathead .cnt{color:var(--brassdim)}
+.cathead .chev{margin-left:auto;color:var(--dim);font-size:10px}
 .bottle{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:7px;cursor:pointer}
 .bottle .bname{font-weight:600}
 .bottle .bsub{font-size:12px;color:var(--mut)}
@@ -100,6 +102,10 @@ body.menuMode{padding-bottom:0}
 /* menu */
 #view-menu{min-height:100vh;padding:34px 8px 60px;text-align:center}
 #menu-exit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;color:var(--dim);font-size:20px;z-index:7;padding:8px}
+#menu-share{position:fixed;top:calc(12px + env(safe-area-inset-top));left:12px;color:var(--dim);font-size:16px;z-index:7;padding:8px}
+.msec{font-size:11px;letter-spacing:3.5px;text-transform:uppercase;color:var(--dim);margin:34px 0 18px}
+.aibox{background:var(--bg3);border:1px dashed var(--brassdim);border-radius:10px;padding:10px;margin:10px 0 2px}
+.aibox .ttl{color:var(--brass2);font-size:13px;letter-spacing:.6px;margin-bottom:6px}
 .menu-head{font-family:var(--serif);font-size:38px;color:var(--brass2);letter-spacing:1px}
 .menu-rule{width:74px;margin:14px auto 8px;border:0;border-top:1px solid var(--brassdim)}
 .menu-sub{font-size:11px;letter-spacing:3.5px;text-transform:uppercase;color:var(--dim);margin-bottom:30px}
@@ -178,6 +184,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 
   <section id="view-menu" class="view">
     <button id="menu-exit" title="Back to the bar">&times;</button>
+    <button id="menu-share" title="Share the menu">&#10548;</button>
     <div id="menu-body"></div>
   </section>
 </main>
@@ -192,14 +199,16 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 <div id="modalwrap"><div id="modal"></div></div>
 <div id="toast"></div>
 <input type="file" id="scan-file" accept="image/*" class="hidden">
+<input type="file" id="recipe-file" accept="image/*" class="hidden">
 <input type="file" id="import-file" accept="application/json,.json" class="hidden">
 
 <script>
 'use strict';
 /* ============================== config ============================== */
 const SCAN_URL = 'https://home-bar.cj13mercado.workers.dev/scan';
+const RECIPE_URL = 'https://home-bar.cj13mercado.workers.dev/recipe';
 const KEY = 'bar-v1';
-const CFG = { scanUrl: SCAN_URL };   // mutable indirection so tests/settings can disable scan
+const CFG = { scanUrl: SCAN_URL, recipeUrl: RECIPE_URL };   // mutable indirection so tests can disable AI features
 
 const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','other'];
 const SPIRITS = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy'];
@@ -317,7 +326,7 @@ function seedRecipes(){
 
 /* ============================== state ============================== */
 let S = null;
-function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar" }; }
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[] }; }
 function load(){
   let raw = null;
   try{ raw = localStorage.getItem(KEY); }catch(e){}
@@ -333,6 +342,7 @@ function load(){
   if(!Array.isArray(d.recipes) || !d.recipes.length) d.recipes = seedRecipes();
   if(!Array.isArray(d.staples)) d.staples = DEFAULT_STAPLES.slice();
   if(typeof d.menuTitle !== 'string') d.menuTitle = "CJ's Bar";
+  if(!Array.isArray(d.collapsedCats)) d.collapsedCats = [];
   return d;
 }
 let _saveT = null;
@@ -448,6 +458,7 @@ function importJSON(text){
   if(!d || d.v !== 1 || !Array.isArray(d.bottles) || !Array.isArray(d.recipes)) return 'That doesn’t look like a Home Bar backup.';
   if(!Array.isArray(d.staples)) d.staples = DEFAULT_STAPLES.slice();
   if(typeof d.menuTitle !== 'string') d.menuTitle = "CJ's Bar";
+  if(!Array.isArray(d.collapsedCats)) d.collapsedCats = [];
   S = d; save(); renderAll(); return null;
 }
 function downloadBackup(){
@@ -560,6 +571,44 @@ function openConfirmSheet(bottles){
   };
 }
 
+/* ============================== AI recipe draft ============================== */
+function recipeAIEnabled(){ return !!CFG.recipeUrl; }
+async function requestRecipe(payload){
+  const r = await fetch(CFG.recipeUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  let j = null; try{ j = await r.json(); }catch(e){}
+  if(!r.ok || !j || j.error || !j.recipe) throw new Error((j && j.error) || ('draft failed: ' + r.status));
+  return j.recipe;
+}
+// worker returns flat ingredients (kind/category/subtype/staple); convert to app req shape
+function convertAiRecipe(rec){
+  const ings = [];
+  for(const i of (rec.ingredients || [])){
+    let req = null;
+    if(i.kind === 'staple' && i.staple) req = { staple: norm(i.staple) };
+    else if(i.category && CATEGORIES.includes(norm(i.category)))
+      req = norm(i.subtype||'') ? { tag:{ category:norm(i.category), subtype:norm(i.subtype) } } : { tag:{ category:norm(i.category) } };
+    if(!req) continue;
+    const ing = { qty: String(i.qty||'').trim(), unit: UNITS.includes(i.unit) ? i.unit : 'oz', req };
+    if(i.note) ing.note = String(i.note);
+    ings.push(ing);
+  }
+  return { name: String(rec.name||'').trim(), method: ['stir','shake','build','blend'].includes(rec.method) ? rec.method : 'shake',
+    glass: String(rec.glass||''), garnish: String(rec.garnish||''), notes: String(rec.notes||''),
+    rating: 0, house: false, ingredients: ings.length ? ings : [null] };
+}
+async function aiDraft(payload){
+  openModal('<h2>Drafting the spec&hellip;</h2><div class="small mut">The AI is writing it up. ~10 seconds.</div><div class="spin"></div>');
+  try{
+    payload.staples = S.staples;
+    const rec = await requestRecipe(payload);
+    openRecipeForm(null, convertAiRecipe(rec));
+    toast('Draft loaded — check it over, then save.');
+  }catch(e){
+    closeModal();
+    toast('AI draft failed — check your connection and try again.');
+  }
+}
+
 /* ============================== rendering ============================== */
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function stars(n){ let s=''; for(let i=1;i<=5;i++) s += i<=n ? '★' : '☆'; return s; }
@@ -594,10 +643,15 @@ function renderShelf(){
   if(!bottles.length){ list.innerHTML = S.bottles.length ? '<div class="dim" style="padding:20px 4px">Nothing matches.</div>' : ''; return; }
   const byCat = {};
   for(const b of bottles) (byCat[b.category] = byCat[b.category] || []).push(b);
+  const searching = !!q; // an active search always shows its hits, even in collapsed groups
   const html = [];
   for(const cat of CATEGORIES){
     if(!byCat[cat]) continue;
-    html.push('<div class="cathead">', esc(cat), '</div>');
+    const total = S.bottles.filter(b => b.category === cat).length;
+    const collapsed = !searching && S.collapsedCats.includes(cat);
+    html.push('<div class="cathead" data-cat="', cat, '"><span>', esc(cat), '</span><span class="cnt">', total, '</span>',
+      '<span class="chev">', collapsed ? '&#9654;' : '&#9660;', '</span></div>');
+    if(collapsed) continue;
     for(const b of byCat[cat].sort((a,z)=>a.name.localeCompare(z.name))){
       html.push('<div class="bottle ', b.level, '" data-id="', b.id, '">',
         '<div class="grow"><div class="bname">', esc(b.name), '</div>',
@@ -607,11 +661,17 @@ function renderShelf(){
     }
   }
   list.innerHTML = html.join('');
+  list.querySelectorAll('.cathead').forEach(el => el.addEventListener('click', () => toggleCat(el.dataset.cat)));
   list.querySelectorAll('.bottle').forEach(el => el.addEventListener('click', e => {
     if(e.target.closest('.editb')) return;
     cycleLevel(el.dataset.id);
   }));
   list.querySelectorAll('.editb').forEach(el => el.addEventListener('click', () => openBottleForm(el.dataset.edit)));
+}
+function toggleCat(cat){
+  const i = S.collapsedCats.indexOf(cat);
+  if(i >= 0) S.collapsedCats.splice(i, 1); else S.collapsedCats.push(cat);
+  save(); renderShelf();
 }
 function renderSpecs(){
   const bases = Array.from(new Set(S.recipes.map(recipeBase))).sort();
@@ -670,21 +730,61 @@ function renderTonight(){
   for(const b of S.bottles.filter(b => b.level === 'out')) shop.push('<div class="shopline"><span style="color:var(--out)">&#9679;</span><span>' + esc(b.name) + ' <span class="dim small">out</span></span></div>');
   document.getElementById('shopping-list').innerHTML = shop.length ? '<div class="card">' + shop.join('') + '</div>' : '<div class="card dim">Nothing needed. Impressive shelf.</div>';
 }
-function renderMenu(){
+let sharedMenu = null; // payload from a shared link (read-only guest view)
+const POUR_CATS = SPIRITS.concat(['amaro']);
+function menuPayload(){
   const items = [];
-  for(const r of S.recipes){
-    const st = recipeStatus(r);
-    if(st.makeable) items.push(r);
-  }
+  for(const r of S.recipes){ if(recipeStatus(r).makeable) items.push(r); }
   items.sort((a,z) => (z.house?1:0) - (a.house?1:0) || (z.rating||0) - (a.rating||0) || a.name.localeCompare(z.name));
-  const html = ['<div class="menu-head">', esc(S.menuTitle), '</div>',
+  const pours = S.bottles.filter(b => b.level !== 'out' && POUR_CATS.includes(b.category))
+    .sort((a,z) => POUR_CATS.indexOf(a.category) - POUR_CATS.indexOf(z.category) || a.name.localeCompare(z.name));
+  return {
+    t: S.menuTitle,
+    c: items.map(r => ({ n:r.name, d:autoDesc(r) || (r.notes||'').trim(), h:!!r.house })),
+    s: pours.map(b => ({ n:b.name, d:tagLabel({ category:b.category, subtype:b.subtype||undefined }) })),
+  };
+}
+function renderMenu(){
+  const p = sharedMenu || menuPayload();
+  document.getElementById('menu-exit').classList.toggle('hidden', !!sharedMenu);
+  document.getElementById('menu-share').classList.toggle('hidden', !!sharedMenu);
+  const html = ['<div class="menu-head">', esc(p.t), '</div>',
     '<hr class="menu-rule"><div class="menu-sub">this evening’s pours</div>'];
-  if(!items.length) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
-  for(const r of items){
-    html.push('<div class="mitem"><div class="mname">', r.house ? '<span class="housestar">★</span>' : '', esc(r.name), '</div>',
-      '<div class="mdesc">', esc(autoDesc(r) || (r.notes||'').trim()), '</div></div>');
+  if(!p.c.length && !p.s.length) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
+  if(p.c.length){
+    html.push('<div class="msec">&mdash; cocktails &mdash;</div>');
+    for(const r of p.c) html.push('<div class="mitem"><div class="mname">', r.h ? '<span class="housestar">★</span>' : '', esc(r.n), '</div>',
+      '<div class="mdesc">', esc(r.d), '</div></div>');
+  }
+  if(p.s.length){
+    html.push('<div class="msec">&mdash; by the pour &mdash;</div>');
+    for(const b of p.s) html.push('<div class="mitem pour"><div class="mname">', esc(b.n), '</div><div class="mdesc">', esc(b.d), '</div></div>');
   }
   document.getElementById('menu-body').innerHTML = html.join('');
+}
+/* the whole menu travels inside the link's #hash — nothing is uploaded anywhere */
+function b64uEncode(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function b64uDecode(s){ s = s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length % 4) s += '='; return decodeURIComponent(escape(atob(s))); }
+function buildMenuLink(){ return location.origin + location.pathname + '#m=' + b64uEncode(JSON.stringify(menuPayload())); }
+function parseMenuHash(hash){
+  const m = /^#m=(.+)$/.exec(hash || ''); if(!m) return null;
+  try{
+    const p = JSON.parse(b64uDecode(m[1]));
+    if(!p || typeof p.t !== 'string' || !Array.isArray(p.c) || !Array.isArray(p.s)) return null;
+    return p;
+  }catch(e){ return null; }
+}
+function enterSharedMenu(p){ sharedMenu = p; setTab('menu'); }
+async function shareMenu(){
+  const url = buildMenuLink();
+  try{
+    if(navigator.share){ await navigator.share({ title: S.menuTitle, url }); return; }
+    await navigator.clipboard.writeText(url);
+    toast('Menu link copied — text it to your guests.');
+  }catch(e){
+    if(e && e.name === 'AbortError') return; // user closed the share sheet
+    toast('Could not share the menu link.');
+  }
 }
 
 /* ============================== forms & sheets ============================== */
@@ -798,10 +898,14 @@ function ingBodyHtml(kind, req, cat){
   }
   return catSelect('ir-cat', cat) + subInput('ir-sub', cat, req.tag && req.tag.subtype || '');
 }
-function openRecipeForm(id){
-  const r = id ? S.recipes.find(x => x.id === id) : { name:'', method:'shake', glass:'coupe', garnish:'', notes:'', rating:0, house:false, ingredients:[null] };
+function openRecipeForm(id, pre){
+  const r = pre || (id ? S.recipes.find(x => x.id === id) : { name:'', method:'shake', glass:'coupe', garnish:'', notes:'', rating:0, house:false, ingredients:[null] });
   if(!r) return;
   openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>' + (id?'Edit recipe':'New recipe') + '</h2>' +
+    (!id && recipeAIEnabled() ? '<div class="aibox"><div class="ttl">&#10024; Let the AI draft it</div>' +
+      '<textarea id="rf-ai-text" rows="2" placeholder="Describe it — &quot;equal parts mezcal, Aperol and lime, salt rim&quot; — or snap a photo of a written recipe."></textarea>' +
+      '<div style="display:flex;gap:8px;margin-top:8px"><button class="abtn ghost" id="rf-ai-go" style="flex:1">Draft from text</button>' +
+      '<button class="abtn ghost" id="rf-ai-photo" style="flex:1">From a photo</button></div></div>' : '') +
     '<label class="fieldlbl">Name</label><input id="rf-name" value="' + esc(r.name) + '" placeholder="e.g. House Coquito">' +
     '<div class="formrow"><span><label class="fieldlbl">Method</label><select id="rf-method">' + ['stir','shake','build','blend'].map(m => '<option' + (m===r.method?' selected':'') + '>' + m + '</option>').join('') + '</select></span>' +
     '<span><label class="fieldlbl">Glass</label><input id="rf-glass" value="' + esc(r.glass||'') + '" placeholder="coupe, rocks…"></span></div>' +
@@ -827,6 +931,14 @@ function openRecipeForm(id){
     });
   };
   ings.querySelectorAll('.ingrow').forEach(wire);
+  const aiGo = document.getElementById('rf-ai-go');
+  if(aiGo) aiGo.onclick = () => {
+    const t = document.getElementById('rf-ai-text').value.trim();
+    if(!t){ toast('Describe the drink first.'); return; }
+    aiDraft({ text: t });
+  };
+  const aiPhoto = document.getElementById('rf-ai-photo');
+  if(aiPhoto) aiPhoto.onclick = () => document.getElementById('recipe-file').click();
   document.getElementById('rf-adding').onclick = () => {
     ings.insertAdjacentHTML('beforeend', ingRowHtml(null));
     wire(ings.lastElementChild);
@@ -894,6 +1006,14 @@ document.getElementById('scan-file').addEventListener('change', e => {
   e.target.value = '';
   if(f) handleScanFile(f);
 });
+document.getElementById('recipe-file').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!f) return;
+  fileToScanPayload(f).then(p => aiDraft({ media_type: p.media_type, data: p.data }))
+    .catch(() => toast('Could not read that photo.'));
+});
+document.getElementById('menu-share').addEventListener('click', shareMenu);
 document.getElementById('import-file').addEventListener('change', e => {
   const f = e.target.files && e.target.files[0];
   e.target.value = '';
@@ -910,6 +1030,8 @@ document.getElementById('menu-exit').addEventListener('click', () => setTab('she
 document.querySelectorAll('#tabbar button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 document.getElementById('modalwrap').addEventListener('click', e => { if(e.target.id === 'modalwrap') closeModal(); });
 setTab('shelf');
+// opened via a shared-menu link? lock straight into the guest menu
+(function(){ const p = parseMenuHash(location.hash); if(p) enterSharedMenu(p); })();
 </script>
 </body>
 </html>

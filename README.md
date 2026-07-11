@@ -1,9 +1,13 @@
 # Home Bar
 
-A single-file, mobile-first PWA for running a home bar: bottle inventory,
-a spec book of classic cocktails, a live "what can I make right now" matcher
-with buy-one-bottle unlock suggestions, a guest-facing Menu Mode — and an AI
-shelf scan that reads bottles straight off a photo of the bar.
+A single-file, mobile-first PWA for running a home bar: bottle inventory
+(collapsible category groups with counts), a spec book of classic cocktails,
+a live "what can I make right now" matcher with buy-one-bottle unlock
+suggestions, and a guest-facing Menu Mode with cocktails + by-the-pour
+sections that can be shared as a link (the menu travels inside the URL hash —
+nothing is uploaded). Two AI features ride on a tiny Cloudflare Worker: a
+shelf scan that reads bottles off a photo of the bar, and a recipe autofill
+that drafts a spec from a text description or a photo of a written recipe.
 
 Everything lives in `index.html` (no build step, no framework). Data persists
 in `localStorage` under the `bar-v1` key, with one-tap JSON export/import in

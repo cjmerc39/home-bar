@@ -7,6 +7,7 @@ const dom = new JSDOM(html, {
   beforeParse(w){ w.TextEncoder=TextEncoder; w.TextDecoder=TextDecoder; w.confirm=()=>true; w.scrollTo=()=>{};
     w.fetch = async (url) => {
       if(String(url).includes('/scan')) return { ok:true, status:200, json: async () => (w.__scanResult || { bottles: [] }) };
+      if(String(url).includes('/recipe')) return { ok:true, status:200, json: async () => (w.__recipeResult || { error:'no mock' }) };
       return { ok:false, status:404, json: async () => ({ error:'not found' }) };
     }; },
 });
@@ -109,6 +110,21 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('bf-save').click(); await sleep(30);
   assert(w.eval('S.bottles.some(b=>b.name==="Fever-Tree Ginger Beer" && b.category==="mixer")'), 'add-bottle form creates a mixer bottle');
 
+  // --- collapsible shelf groups with counts ---
+  let whead = [...d.querySelectorAll('#shelf-list .cathead')].find(h=>h.dataset.cat==='whiskey');
+  assert(whead.querySelector('.cnt').textContent==='2', 'category header shows a bottle count');
+  whead.click(); await sleep(30);
+  assert(w.eval('S.collapsedCats.includes("whiskey")'), 'tapping a header collapses the group');
+  assert(![...d.querySelectorAll('#shelf-list .bname')].some(e=>e.textContent==='Eagle Rare'), 'collapsed group hides its bottles');
+  d.getElementById('shelf-search').value='eagle';
+  d.getElementById('shelf-search').dispatchEvent(new w.Event('input')); await sleep(20);
+  assert([...d.querySelectorAll('#shelf-list .bname')].some(e=>e.textContent==='Eagle Rare'), 'search still finds bottles inside collapsed groups');
+  d.getElementById('shelf-search').value='';
+  d.getElementById('shelf-search').dispatchEvent(new w.Event('input')); await sleep(20);
+  whead = [...d.querySelectorAll('#shelf-list .cathead')].find(h=>h.dataset.cat==='whiskey');
+  whead.click(); await sleep(30);
+  assert(!w.eval('S.collapsedCats.includes("whiskey")') && [...d.querySelectorAll('#shelf-list .bname')].some(e=>e.textContent==='Eagle Rare'), 'tapping again expands the group');
+
   // --- recipe CRUD via UI form ---
   w.eval('setTab("specs")');
   const specCount = d.querySelectorAll('#spec-list .rcard').length;
@@ -144,11 +160,33 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('S.recipes.find(r=>r.name==="Gimlet").house = true; save();');
   w.eval('setTab("menu")'); await sleep(20);
   assert(d.body.classList.contains('menuMode'), 'menu mode strips admin chrome (menuMode class hides tabbar/topbar)');
-  const menuNames = [...d.querySelectorAll('#menu-body .mname')].map(e=>e.textContent);
+  const menuNames = [...d.querySelectorAll('#menu-body .mitem:not(.pour) .mname')].map(e=>e.textContent);
   assert(menuNames.length>0 && menuNames[0].includes('Gimlet') && menuNames[0].includes('★'), 'house drink pinned to the top of the menu with a ★');
   const makeableNames = JSON.parse(w.eval('JSON.stringify(S.recipes.filter(r=>recipeStatus(r).makeable).map(r=>r.name))'));
-  assert(menuNames.length===makeableNames.length && menuNames.every(n=>makeableNames.some(m=>n.includes(m))), 'menu lists exactly the makeable recipes');
-  assert(d.querySelectorAll('#view-menu button').length===1, 'only admin control in menu mode is the exit button');
+  assert(menuNames.length===makeableNames.length && menuNames.every(n=>makeableNames.some(m=>n.includes(m))), 'menu cocktails section lists exactly the makeable recipes');
+
+  // sections: cocktails + by the pour
+  assert(d.querySelectorAll('#menu-body .msec').length===2, 'menu has cocktails and by-the-pour sections');
+  const pourNames = [...d.querySelectorAll('#menu-body .mitem.pour .mname')].map(e=>e.textContent);
+  assert(pourNames.length===5 && pourNames.includes('Sipsmith'), 'pour section lists the 5 stocked spirits & amari');
+  assert(!pourNames.includes('Fever-Tree Ginger Beer') && !pourNames.includes('Angostura'), 'mixers and bitters stay off the pour list');
+  w.eval('S.bottles.find(b=>b.name==="Mijenta Reposado").level="out"; renderMenu();'); await sleep(20);
+  assert(![...d.querySelectorAll('#menu-body .mitem.pour .mname')].some(e=>e.textContent==='Mijenta Reposado'), 'an out bottle leaves the pour list');
+  w.eval('S.bottles.find(b=>b.name==="Mijenta Reposado").level="full"; renderMenu();'); await sleep(20);
+
+  // shareable menu link (payload rides in the #hash)
+  const link = w.eval('buildMenuLink()');
+  assert(typeof link==='string' && link.includes('#m='), 'share link embeds the menu in the URL hash');
+  const hash = '#m=' + link.split('#m=')[1];
+  const payload = JSON.parse(w.eval('JSON.stringify(parseMenuHash('+JSON.stringify(hash)+'))'));
+  assert(payload && payload.t===w.eval('S.menuTitle') && payload.c.length===menuNames.length && payload.s.length===5, 'share payload round-trips title, cocktails, and pours');
+  assert(w.eval('parseMenuHash("#m=!!!notvalid")')===null && w.eval('parseMenuHash("#nope")')===null, 'garbage share hashes are rejected');
+  w.eval('enterSharedMenu(parseMenuHash('+JSON.stringify(hash)+'))'); await sleep(20);
+  assert(d.body.classList.contains('menuMode') && d.getElementById('menu-exit').classList.contains('hidden')
+      && d.getElementById('menu-share').classList.contains('hidden'), 'a shared link locks into the guest menu with zero admin controls');
+  w.eval('sharedMenu=null; renderMenu();'); await sleep(20);
+
+  assert(d.querySelectorAll('#view-menu button').length===2, 'admin menu chrome is just share + exit');
   d.getElementById('menu-exit').click(); await sleep(20);
   assert(!d.body.classList.contains('menuMode'), 'menu exit returns to admin');
 
@@ -188,6 +226,30 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('S.bottles.some(b=>b.name==="Dolin Rouge" && b.category==="vermouth" && b.subtype==="sweet")'), 'scanned sweet vermouth lands on the shelf correctly');
   assert(w.eval('S.bottles.filter(b=>b.name==="Campari Bitter").length')===1, 'duplicate row stayed unchecked — no double bottle');
   assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Negroni")).makeable')===true, 'scanned vermouth completes the Negroni');
+
+  // --- AI recipe draft: mocked fetch -> prefilled form -> save ---
+  w.eval('setTab("specs")');
+  d.getElementById('btn-addrecipe').click(); await sleep(30);
+  assert(d.getElementById('rf-ai-text')!==null, 'new-recipe form offers the AI draft box');
+  w.eval('closeModal()');
+  w.__recipeResult = { recipe: { name:'Division Bell', method:'shake', glass:'coupe', garnish:'grapefruit twist', notes:'',
+    ingredients: [
+      { kind:'tag', category:'mezcal', qty:'1', unit:'oz' },
+      { kind:'tag', category:'liqueur', subtype:'maraschino', qty:'0.75', unit:'oz' },
+      { kind:'tag', category:'amaro', subtype:'aperol', qty:'0.75', unit:'oz' },
+      { kind:'staple', staple:'lime', qty:'0.75', unit:'oz' },
+      { kind:'tag', category:'not-real', qty:'1', unit:'oz' },
+    ] } };
+  const rec = await w.requestRecipe({ text:'a mezcal last word riff' });
+  assert(rec.name==='Division Bell', 'requestRecipe posts to RECIPE_URL and returns the draft');
+  w.openRecipeForm(null, w.convertAiRecipe(rec)); await sleep(30);
+  assert(d.getElementById('rf-name').value==='Division Bell', 'AI draft prefills the recipe name');
+  assert(d.querySelectorAll('#rf-ings .ingrow').length===4, 'AI draft prefills valid ingredient rows and drops junk categories');
+  assert([...d.querySelectorAll('#rf-ings .ingrow')][1].querySelector('.ir-sub').value==='maraschino', 'tag subtypes land in the form');
+  assert([...d.querySelectorAll('#rf-ings .ingrow')][3].querySelector('.ir-staple').value==='lime', 'staple ingredients land in the form');
+  d.getElementById('rf-save').click(); await sleep(30);
+  assert(w.eval('S.recipes.some(r=>r.name==="Division Bell")'), 'drafted recipe saves like any other');
+  w.eval('deleteRecipe(S.recipes.find(r=>r.name==="Division Bell").id)');
 
   // --- persistence + migration guard ---
   await sleep(600); // let the debounced save flush

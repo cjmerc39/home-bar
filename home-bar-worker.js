@@ -10,13 +10,26 @@
  *   5. Optional but recommended: add variable
  *        ALLOWED_ORIGIN = https://cjmerc39.github.io
  *
- * POST /scan -> { media_type, data } in (base64 image), { bottles: [...] } out.
+ * POST /scan   -> { media_type, data } in (base64 image), { bottles: [...] } out.
+ * POST /recipe -> { text } or { media_type, data } (+ optional staples[]) in,
+ *                 { recipe: {...} } out — drafts a structured cocktail spec.
  * The API key never leaves the worker.
  */
 
 const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','other'];
+const UNITS = ['oz','ml','dash','tsp','bsp','drop','leaf','wedge','pinch','rinse','top','whole'];
+const METHODS = ['stir','shake','build','blend'];
+const DEFAULT_STAPLES = ['lime','lemon','sugar','simple syrup','honey','agave syrup','egg white','mint','salt','espresso','coconut cream','cream'];
 const IMAGE_TYPES = ['image/jpeg','image/png','image/webp'];
 const MAX_B64 = 11 * 1024 * 1024; // ~8MB of image as base64
+
+const SUBTYPE_CONVENTIONS = [
+  'tequila: blanco/reposado/anejo; whiskey: bourbon/rye/scotch/japanese/irish;',
+  'rum: white/aged/dark/overproof; vermouth: sweet/dry; bitters: aromatic/orange/peychauds/mole;',
+  'amaro: campari/aperol/nonino/averna/fernet; wine: sparkling/red/white;',
+  'liqueur: orange/maraschino/green chartreuse/yellow chartreuse/amaretto/coffee/falernum/absinthe;',
+  'mixer: soda water/tonic/ginger beer/grapefruit soda/cola/pineapple juice/grapefruit juice/orgeat.',
+].join(' ');
 
 const SCAN_PROMPT = [
   'This is a photo of a home bar. Identify every liquor, spirit, liqueur, amaro,',
@@ -66,6 +79,7 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
     const path = new URL(request.url).pathname;
     if (path === '/scan' && request.method === 'POST') return scan(request, env, cors);
+    if (path === '/recipe' && request.method === 'POST') return recipe(request, env, cors);
     return json({ error: 'not found' }, 404, cors);
   },
 };
@@ -109,6 +123,99 @@ async function scan(request, env, cors) {
   try { parsed = JSON.parse(text); } catch (e) { return json({ error: 'could not parse model output' }, 502, cors); }
   const bottles = Array.isArray(parsed && parsed.bottles) ? parsed.bottles : [];
   return json({ bottles }, 200, cors);
+}
+
+/* ---- /recipe : draft a structured cocktail spec from text or a photo ---- */
+const RECIPE_SCHEMA = {
+  type: 'object',
+  properties: {
+    recipe: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        method: { type: 'string', enum: METHODS },
+        glass: { type: 'string' },
+        garnish: { type: 'string' },
+        notes: { type: 'string' },
+        ingredients: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              qty: { type: 'string' },
+              unit: { type: 'string', enum: UNITS },
+              kind: { type: 'string', enum: ['tag', 'staple'] },
+              category: { type: 'string', enum: CATEGORIES },
+              subtype: { type: 'string' },
+              staple: { type: 'string' },
+              note: { type: 'string' },
+            },
+            required: ['kind'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['name', 'method', 'ingredients'],
+      additionalProperties: false,
+    },
+  },
+  required: ['recipe'],
+  additionalProperties: false,
+};
+
+function recipePrompt(staples) {
+  return 'Turn the given cocktail (described in text, or photographed from a book/card) into ONE structured recipe. ' +
+    'Ingredient rules: anything on this household staples list must be kind:"staple" with the exact matching staple string: [' +
+    staples.join(', ') + ']. Everything that comes out of a bottle is kind:"tag" with a category from the allowed list and, ' +
+    'when meaningful, a lowercase subtype following these conventions: ' + SUBTYPE_CONVENTIONS + ' ' +
+    'qty is a plain decimal string like "0.75". Keep glass and garnish short. Put technique tips in notes. ' +
+    'If the source names a specific brand, put the generic tag in the ingredient and mention the brand in notes.';
+}
+
+async function recipe(request, env, cors) {
+  if (!env.ANTHROPIC_API_KEY) return json({ error: 'ANTHROPIC_API_KEY secret not set on the worker' }, 500, cors);
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: 'bad request body' }, 400, cors); }
+  const text = String(body && body.text || '').slice(0, 4000);
+  const mediaType = String(body && body.media_type || '');
+  const data = String(body && body.data || '');
+  const staples = (Array.isArray(body && body.staples) ? body.staples : DEFAULT_STAPLES)
+    .slice(0, 50).map((s) => String(s).slice(0, 40));
+  const hasImage = mediaType && data;
+  if (!text && !hasImage) return json({ error: 'send text or an image' }, 400, cors);
+  if (hasImage) {
+    if (!IMAGE_TYPES.includes(mediaType)) return json({ error: 'media_type must be image/jpeg, image/png, or image/webp' }, 400, cors);
+    if (!/^[A-Za-z0-9+/=]+$/.test(data)) return json({ error: 'data must be base64' }, 400, cors);
+    if (data.length > MAX_B64) return json({ error: 'image too large — resize below ~8MB' }, 413, cors);
+  }
+
+  const content = [];
+  if (hasImage) content.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data } });
+  content.push({ type: 'text', text: recipePrompt(staples) + (text ? '\n\nThe drink: ' + text : '') });
+
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-8',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content }],
+      output_config: { format: { type: 'json_schema', schema: RECIPE_SCHEMA } },
+    }),
+  });
+  const resp = await r.json().catch(() => null);
+  if (!r.ok) return json({ error: (resp && resp.error && resp.error.message) || 'api error' }, 502, cors);
+  if (resp && resp.stop_reason === 'refusal') return json({ error: 'the model declined this request' }, 502, cors);
+
+  const out = ((resp && resp.content) || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  let parsed;
+  try { parsed = JSON.parse(out); } catch (e) { return json({ error: 'could not parse model output' }, 502, cors); }
+  if (!parsed || !parsed.recipe) return json({ error: 'no recipe in model output' }, 502, cors);
+  return json({ recipe: parsed.recipe }, 200, cors);
 }
 
 function json(obj, status, headers) {
