@@ -1,0 +1,915 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Home Bar</title>
+<meta name="theme-color" content="#1a1410">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#1a1410; --bg2:#241c15; --bg3:#2e241a; --line:#3a2f22;
+  --ink:#f1e6d0; --mut:#b7a789; --dim:#7d6c55;
+  --brass:#c9a15a; --brass2:#e2c184; --brassdim:#8f7440;
+  --low:#d9832e; --out:#6b5b48; --bad:#c25b4a;
+  --serif:'Playfair Display',Georgia,'Times New Roman',serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(120% 90% at 50% 0%, rgba(255,220,160,.045), transparent 55%),
+             radial-gradient(140% 120% at 50% 110%, rgba(0,0,0,.5), transparent 60%)}
+h1,h2,h3,.serif{font-family:var(--serif)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+input:focus,select:focus,textarea:focus{outline:1px solid var(--brassdim)}
+::placeholder{color:var(--dim)}
+main{position:relative;z-index:1;max-width:640px;margin:0 auto;padding:0 14px}
+/* top bar */
+#topbar{position:sticky;top:0;z-index:5;background:linear-gradient(var(--bg) 82%,transparent);padding:calc(14px + env(safe-area-inset-top)) 14px 10px;max-width:640px;margin:0 auto;display:flex;align-items:baseline;gap:10px}
+#topbar h1{font-size:26px;letter-spacing:.5px;color:var(--brass2);font-weight:700}
+#topbar .sub{color:var(--dim);font-size:12px;letter-spacing:2px;text-transform:uppercase}
+#btn-settings{margin-left:auto;color:var(--mut);font-size:19px;padding:2px 6px}
+/* tabs */
+#tabbar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:rgba(20,15,11,.96);border-top:1px solid var(--line);backdrop-filter:blur(6px);padding-bottom:env(safe-area-inset-bottom)}
+#tabbar .row{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+#tabbar button{padding:13px 4px 12px;color:var(--dim);font-size:12px;letter-spacing:1.6px;text-transform:uppercase}
+#tabbar button.on{color:var(--brass2)}
+#tabbar button.on span{border-bottom:2px solid var(--brass);padding-bottom:4px}
+section.view{display:none;padding-bottom:24px}
+section.view.on{display:block}
+/* menu mode strips chrome */
+body.menuMode #tabbar,body.menuMode #topbar{display:none}
+body.menuMode{padding-bottom:0}
+/* generic bits */
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.rowline{display:flex;align-items:center;gap:10px}
+.grow{flex:1;min-width:0}
+.mut{color:var(--mut)} .dim{color:var(--dim)} .small{font-size:12.5px}
+.brass{color:var(--brass2)}
+.hidden{display:none!important}
+.htitle{font-size:19px;color:var(--brass2);margin:20px 0 10px;letter-spacing:.4px}
+.chip{display:inline-block;font-size:11.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--mut);border:1px solid var(--line);border-radius:99px;padding:3px 9px}
+.abtn{display:inline-block;background:var(--brass);color:#241a0c;font-weight:600;border-radius:9px;padding:10px 16px;text-align:center}
+.abtn.ghost{background:transparent;color:var(--brass2);border:1px solid var(--brassdim)}
+.abtn.danger{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+.abtn:disabled{opacity:.45}
+.fieldlbl{display:block;font-size:11.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--dim);margin:12px 0 4px}
+/* shelf */
+#shelf-tools{display:flex;gap:8px;margin:4px 0 14px}
+#shelf-tools input{flex:1}
+#shelf-tools .abtn{white-space:nowrap;padding:9px 13px}
+.cathead{font-size:12px;letter-spacing:2.2px;text-transform:uppercase;color:var(--dim);margin:16px 2px 7px}
+.bottle{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:7px;cursor:pointer}
+.bottle .bname{font-weight:600}
+.bottle .bsub{font-size:12px;color:var(--mut)}
+.bottle.out .bname{color:var(--out);text-decoration:line-through}
+.lvl{font-size:11px;letter-spacing:1px;text-transform:uppercase;border-radius:99px;padding:4px 10px;border:1px solid}
+.lvl.full{color:var(--brass2);border-color:var(--brassdim)}
+.lvl.low{color:var(--low);border-color:var(--low)}
+.lvl.out{color:var(--out);border-color:var(--out)}
+.editb{color:var(--dim);padding:6px;font-size:15px}
+#empty-shelf{text-align:center;padding:44px 20px;color:var(--mut)}
+#empty-shelf .glass{font-size:44px;color:var(--brassdim);font-family:var(--serif)}
+#empty-shelf h2{margin:10px 0 6px;color:var(--brass2)}
+#empty-shelf .abtn{margin:14px 6px 0}
+/* specs */
+#spec-filters{display:flex;flex-wrap:wrap;gap:7px;margin:4px 0 14px}
+#spec-filters .chip{cursor:pointer}
+#spec-filters .chip.on{color:#241a0c;background:var(--brass);border-color:var(--brass)}
+.rcard{display:flex;align-items:center;gap:10px;cursor:pointer}
+.rcard .rname{font-family:var(--serif);font-size:18px}
+.rcard .stars{color:var(--brass);font-size:12px;letter-spacing:2px}
+.mdot{width:9px;height:9px;border-radius:99px;background:var(--line);flex:none}
+.mdot.mk{background:var(--brass)} .mdot.lw{background:var(--low)}
+.housestar{color:var(--brass);font-size:15px}
+/* tonight */
+.tonight-item .rname{font-family:var(--serif);font-size:17px}
+.lowtag{font-size:11px;color:var(--low);letter-spacing:1px;text-transform:uppercase}
+.unlock .buy{color:var(--brass2);font-weight:600}
+.shopline{display:flex;gap:8px;align-items:baseline}
+/* menu */
+#view-menu{min-height:100vh;padding:34px 8px 60px;text-align:center}
+#menu-exit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;color:var(--dim);font-size:20px;z-index:7;padding:8px}
+.menu-head{font-family:var(--serif);font-size:38px;color:var(--brass2);letter-spacing:1px}
+.menu-rule{width:74px;margin:14px auto 8px;border:0;border-top:1px solid var(--brassdim)}
+.menu-sub{font-size:11px;letter-spacing:3.5px;text-transform:uppercase;color:var(--dim);margin-bottom:30px}
+.mitem{margin:0 auto 26px;max-width:440px}
+.mitem .mname{font-family:var(--serif);font-size:23px;color:var(--ink)}
+.mitem .mdesc{font-family:var(--serif);font-style:italic;font-size:14.5px;color:var(--mut);margin-top:4px}
+.mitem .housestar{margin-right:6px}
+#menu-empty{color:var(--dim);font-family:var(--serif);font-style:italic;margin-top:60px}
+/* modal */
+#modalwrap{position:fixed;inset:0;z-index:20;display:none;background:rgba(10,7,5,.7);align-items:flex-end;justify-content:center}
+#modalwrap.on{display:flex}
+#modal{background:var(--bg2);border:1px solid var(--line);border-bottom:0;border-radius:16px 16px 0 0;width:100%;max-width:640px;max-height:88vh;overflow-y:auto;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+#modal h2{color:var(--brass2);font-size:21px;margin-bottom:4px}
+.mclose{float:right;color:var(--dim);font-size:20px;padding:0 4px}
+.formrow{display:flex;gap:8px} .formrow>*{flex:1}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{flex:1;padding:9px 4px;color:var(--mut);font-size:13px;background:var(--bg3)}
+.seg button.on{background:var(--brass);color:#241a0c;font-weight:600}
+.ingrow{background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:9px;margin-bottom:8px}
+.ingrow .formrow{margin-bottom:6px}
+.ingrow .del{color:var(--bad);font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.starpick{font-size:26px;letter-spacing:6px;color:var(--brassdim);cursor:pointer}
+.starpick .lit{color:var(--brass)}
+.scanrow{display:flex;gap:9px;align-items:center;background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:9px;margin-bottom:8px}
+.scanrow input[type=checkbox]{width:auto;transform:scale(1.25)}
+.scanrow .dup{font-size:11px;color:var(--low)}
+.spin{margin:26px auto;width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--brass);border-radius:99px;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom));background:var(--bg3);border:1px solid var(--brassdim);color:var(--ink);padding:10px 18px;border-radius:99px;z-index:30;display:none;font-size:14px;max-width:88vw;text-align:center}
+#toast.on{display:block}
+.ing-line{display:flex;gap:8px;padding:3px 0}
+.ing-line .qty{color:var(--brass2);min-width:64px;text-align:right}
+.ing-line.miss .lbl{color:var(--bad)}
+.detmeta{color:var(--mut);font-size:13px;margin:6px 0 2px}
+hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
+</style>
+</head>
+<body>
+<header id="topbar">
+  <h1>Home Bar</h1><span class="sub">est. 2026</span>
+  <button id="btn-settings" title="Settings">&#9881;</button>
+</header>
+<main>
+  <section id="view-shelf" class="view">
+    <div id="shelf-tools">
+      <input id="shelf-search" type="search" placeholder="Search the shelf&hellip;">
+      <button class="abtn ghost" id="btn-scan">&#128247; Scan</button>
+      <button class="abtn" id="btn-addbottle">+ Add</button>
+    </div>
+    <div id="shelf-list"></div>
+    <div id="empty-shelf" class="hidden">
+      <div class="glass serif">&#129346;</div>
+      <h2>The shelf is bare</h2>
+      <div class="small mut">Photograph your bar and let the AI read the labels,<br>or add bottles by hand.</div>
+      <div>
+        <button class="abtn" id="btn-scan-empty">&#128247; Scan the shelf</button>
+        <button class="abtn ghost" id="btn-add-empty">Add a bottle</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-specs" class="view">
+    <div id="spec-filters"></div>
+    <div id="spec-list"></div>
+    <button class="abtn ghost" id="btn-addrecipe" style="width:100%;margin-top:6px">+ New recipe</button>
+  </section>
+
+  <section id="view-tonight" class="view">
+    <h2 class="htitle">Makeable now</h2>
+    <div id="makeable-list"></div>
+    <h2 class="htitle">One bottle away</h2>
+    <div id="unlock-list"></div>
+    <h2 class="htitle">Shopping list</h2>
+    <div id="shopping-list"></div>
+  </section>
+
+  <section id="view-menu" class="view">
+    <button id="menu-exit" title="Back to the bar">&times;</button>
+    <div id="menu-body"></div>
+  </section>
+</main>
+
+<nav id="tabbar"><div class="row">
+  <button data-tab="shelf" class="on"><span>Shelf</span></button>
+  <button data-tab="specs"><span>Specs</span></button>
+  <button data-tab="tonight"><span>Tonight</span></button>
+  <button data-tab="menu"><span>Menu</span></button>
+</div></nav>
+
+<div id="modalwrap"><div id="modal"></div></div>
+<div id="toast"></div>
+<input type="file" id="scan-file" accept="image/*" class="hidden">
+<input type="file" id="import-file" accept="application/json,.json" class="hidden">
+
+<script>
+'use strict';
+/* ============================== config ============================== */
+const SCAN_URL = 'https://home-bar.cj13mercado.workers.dev/scan';
+const KEY = 'bar-v1';
+const CFG = { scanUrl: SCAN_URL };   // mutable indirection so tests/settings can disable scan
+
+const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','other'];
+const SPIRITS = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy'];
+const SUBTYPES = {
+  tequila:['blanco','reposado','anejo','cristalino'],
+  mezcal:['espadin','joven'],
+  whiskey:['bourbon','rye','scotch','japanese','irish'],
+  rum:['white','aged','dark','overproof','agricole'],
+  gin:['london dry','old tom','navy'],
+  vodka:[],
+  brandy:['cognac','apple','pisco'],
+  amaro:['campari','aperol','nonino','averna','fernet','cynar','montenegro'],
+  liqueur:['orange','maraschino','green chartreuse','yellow chartreuse','amaretto','coffee','falernum','absinthe','elderflower'],
+  vermouth:['sweet','dry','blanc'],
+  bitters:['aromatic','orange','peychauds','mole','chocolate'],
+  wine:['sparkling','red','white','sherry','port'],
+  mixer:['soda water','tonic','ginger beer','grapefruit soda','cola','pineapple juice','grapefruit juice','orgeat'],
+  other:[]
+};
+const DEFAULT_STAPLES = ['lime','lemon','sugar','simple syrup','honey','agave syrup','egg white','mint','salt','espresso','coconut cream','cream'];
+const UNITS = ['oz','ml','dash','tsp','bsp','drop','leaf','wedge','pinch','rinse','top','whole'];
+const LEVELS = ['full','low','out'];
+
+// nicer display names for specific tag combos
+const TAG_LABELS = {
+  'amaro/campari':'Campari','amaro/aperol':'Aperol','amaro/nonino':'Amaro Nonino','amaro/averna':'Amaro Averna',
+  'liqueur/orange':'orange liqueur','liqueur/maraschino':'maraschino liqueur','liqueur/coffee':'coffee liqueur',
+  'liqueur/green chartreuse':'green Chartreuse','liqueur/yellow chartreuse':'yellow Chartreuse',
+  'liqueur/amaretto':'amaretto','liqueur/falernum':'falernum','liqueur/absinthe':'absinthe',
+  'vermouth/sweet':'sweet vermouth','vermouth/dry':'dry vermouth',
+  'bitters/aromatic':'aromatic bitters','bitters/peychauds':"Peychaud's bitters",'bitters/orange':'orange bitters','bitters/mole':'mole bitters',
+  'whiskey/bourbon':'bourbon','whiskey/rye':'rye whiskey','whiskey/scotch':'scotch','whiskey/japanese':'Japanese whisky',
+  'rum/white':'white rum','rum/aged':'aged rum','rum/dark':'dark rum',
+  'tequila/blanco':'blanco tequila','tequila/reposado':'reposado tequila','tequila/anejo':'añejo tequila',
+  'wine/sparkling':'sparkling wine'
+};
+
+/* ============================== seed recipes ============================== */
+function T(category, subtype){ return subtype ? {tag:{category, subtype}} : {tag:{category}}; }
+function ST(name){ return {staple:name}; }
+function ING(qty, unit, req, note){ const i={qty,unit,req}; if(note) i.note=note; return i; }
+function seedRecipes(){
+  const R = (id,name,method,glass,garnish,notes,ings)=>({id,name,method,glass,garnish,notes,rating:0,house:false,ingredients:ings});
+  return [
+    R('r01','Old Fashioned','stir','rocks','orange twist','',[
+      ING('2','oz',T('whiskey','bourbon')), ING('1','tsp',ST('sugar')), ING('2','dash',T('bitters','aromatic'))]),
+    R('r02','Manhattan','stir','coupe','brandied cherry','',[
+      ING('2','oz',T('whiskey','rye')), ING('1','oz',T('vermouth','sweet')), ING('2','dash',T('bitters','aromatic'))]),
+    R('r03','Whiskey Sour','shake','rocks','lemon + cherry','Egg white optional but lovely.',[
+      ING('2','oz',T('whiskey','bourbon')), ING('0.75','oz',ST('lemon')), ING('0.75','oz',ST('simple syrup')), ING('1','whole',ST('egg white'),'optional')]),
+    R('r04','Gold Rush','shake','rocks','lemon twist','Honey syrup: 3 parts honey, 1 part hot water.',[
+      ING('2','oz',T('whiskey','bourbon')), ING('0.75','oz',ST('lemon')), ING('0.75','oz',ST('honey'))]),
+    R('r05','Penicillin','shake','rocks','candied ginger','Honey-ginger syrup; float ¼ oz peaty Islay scotch.',[
+      ING('2','oz',T('whiskey','scotch')), ING('0.75','oz',ST('lemon')), ING('0.75','oz',ST('honey'))]),
+    R('r06','Paper Plane','shake','coupe','','Equal parts, shaken cold.',[
+      ING('0.75','oz',T('whiskey','bourbon')), ING('0.75','oz',T('amaro','aperol')), ING('0.75','oz',T('amaro','nonino')), ING('0.75','oz',ST('lemon'))]),
+    R('r07','Boulevardier','stir','rocks','orange twist','',[
+      ING('1.25','oz',T('whiskey','bourbon')), ING('1','oz',T('amaro','campari')), ING('1','oz',T('vermouth','sweet'))]),
+    R('r08','Sazerac','stir','rocks','lemon twist','Chilled glass, no ice. Express the lemon, discard.',[
+      ING('2','oz',T('whiskey','rye')), ING('1','tsp',ST('sugar')), ING('3','dash',T('bitters','peychauds')), ING('1','rinse',T('liqueur','absinthe'))]),
+    R('r09','Highball','build','highball','lemon twist','Japanese style: hard ice, gentle stir, very cold soda.',[
+      ING('2','oz',T('whiskey','japanese')), ING('4','oz',T('mixer','soda water'))]),
+    R('r10','Margarita','shake','rocks','lime + salt rim','',[
+      ING('2','oz',T('tequila')), ING('0.75','oz',T('liqueur','orange')), ING('0.75','oz',ST('lime')), ING('1','pinch',ST('salt'),'rim, optional')]),
+    R('r11',"Tommy's Margarita",'shake','rocks','lime wheel','',[
+      ING('2','oz',T('tequila')), ING('1','oz',ST('lime')), ING('0.5','oz',ST('agave syrup'))]),
+    R('r12','Paloma','build','highball','lime + salt rim','',[
+      ING('2','oz',T('tequila')), ING('0.5','oz',ST('lime')), ING('3','oz',T('mixer','grapefruit soda')), ING('1','pinch',ST('salt'),'rim, optional')]),
+    R('r13','Ranch Water','build','highball','lime','Topo Chico if you can get it.',[
+      ING('2','oz',T('tequila')), ING('0.75','oz',ST('lime')), ING('4','oz',T('mixer','soda water'))]),
+    R('r14','Oaxaca Old Fashioned','stir','rocks','flamed orange twist','Mole bitters if you have them.',[
+      ING('1.5','oz',T('tequila','reposado')), ING('0.5','oz',T('mezcal')), ING('1','tsp',ST('agave syrup')), ING('2','dash',T('bitters','aromatic'))]),
+    R('r15','Daiquiri','shake','coupe','lime wheel','',[
+      ING('2','oz',T('rum','white')), ING('1','oz',ST('lime')), ING('0.75','oz',ST('simple syrup'))]),
+    R('r16','Mojito','build','highball','mint sprig','Slap the mint, don’t shred it.',[
+      ING('2','oz',T('rum','white')), ING('0.75','oz',ST('lime')), ING('2','tsp',ST('sugar')), ING('8','leaf',ST('mint')), ING('2','oz',T('mixer','soda water'))]),
+    R('r17','Mai Tai','shake','rocks','mint + spent lime shell','',[
+      ING('2','oz',T('rum','aged')), ING('0.75','oz',ST('lime')), ING('0.5','oz',T('liqueur','orange')), ING('0.5','oz',T('mixer','orgeat'))]),
+    R('r18',"Dark 'n Stormy",'build','highball','lime wedge','Goslings Black Seal is traditional.',[
+      ING('2','oz',T('rum','dark')), ING('0.5','oz',ST('lime')), ING('4','oz',T('mixer','ginger beer'))]),
+    R('r19','Jungle Bird','shake','rocks','pineapple frond','Blackstrap rum if you have it.',[
+      ING('1.5','oz',T('rum','dark')), ING('0.75','oz',T('amaro','campari')), ING('1.5','oz',T('mixer','pineapple juice')), ING('0.5','oz',ST('lime')), ING('0.5','oz',ST('simple syrup'))]),
+    R('r20','Piña Colada','blend','hurricane','pineapple + cherry','',[
+      ING('2','oz',T('rum')), ING('1.5','oz',ST('coconut cream')), ING('1.5','oz',T('mixer','pineapple juice')), ING('0.5','oz',ST('lime'))]),
+    R('r21','Hemingway Daiquiri','shake','coupe','lime wheel','',[
+      ING('2','oz',T('rum','white')), ING('0.75','oz',ST('lime')), ING('0.5','oz',T('mixer','grapefruit juice')), ING('0.5','oz',T('liqueur','maraschino'))]),
+    R('r22',"Corn 'n Oil",'build','rocks','lime wedge','Blackstrap rum is traditional.',[
+      ING('2','oz',T('rum','aged')), ING('0.5','oz',T('liqueur','falernum')), ING('0.5','oz',ST('lime')), ING('2','dash',T('bitters','aromatic'))]),
+    R('r23','Negroni','stir','rocks','orange slice','Equal parts. Big cube.',[
+      ING('1','oz',T('gin')), ING('1','oz',T('amaro','campari')), ING('1','oz',T('vermouth','sweet'))]),
+    R('r24','Martini','stir','coupe','lemon twist or olive','Adjust vermouth to taste; stir very cold.',[
+      ING('2.5','oz',T('gin')), ING('0.5','oz',T('vermouth','dry'))]),
+    R('r25','Gimlet','shake','coupe','lime wheel','',[
+      ING('2','oz',T('gin')), ING('0.75','oz',ST('lime')), ING('0.75','oz',ST('simple syrup'))]),
+    R('r26','Last Word','shake','coupe','','Equal parts.',[
+      ING('0.75','oz',T('gin')), ING('0.75','oz',T('liqueur','green chartreuse')), ING('0.75','oz',T('liqueur','maraschino')), ING('0.75','oz',ST('lime'))]),
+    R('r27','Tom Collins','build','collins','lemon + cherry','',[
+      ING('2','oz',T('gin')), ING('1','oz',ST('lemon')), ING('0.5','oz',ST('simple syrup')), ING('3','oz',T('mixer','soda water'))]),
+    R('r28','French 75','shake','flute','lemon twist','Shake gin, lemon, syrup; top with bubbles.',[
+      ING('1','oz',T('gin')), ING('0.5','oz',ST('lemon')), ING('0.5','oz',ST('simple syrup')), ING('3','oz',T('wine','sparkling'))]),
+    R('r29','Aperol Spritz','build','wine glass','orange slice','3-2-1 over plenty of ice.',[
+      ING('3','oz',T('wine','sparkling')), ING('2','oz',T('amaro','aperol')), ING('1','oz',T('mixer','soda water'))]),
+    R('r30','Amaretto Sour','shake','rocks','lemon + cherry','Morgenthaler spec — cask-proof bourbon if possible.',[
+      ING('1.5','oz',T('liqueur','amaretto')), ING('0.75','oz',T('whiskey','bourbon')), ING('1','oz',ST('lemon')), ING('1','tsp',ST('simple syrup')), ING('1','whole',ST('egg white'))]),
+    R('r31','Espresso Martini','shake','coupe','three coffee beans','Fresh espresso, shaken hard.',[
+      ING('2','oz',T('vodka')), ING('1','oz',ST('espresso')), ING('0.5','oz',T('liqueur','coffee')), ING('0.25','oz',ST('simple syrup'))]),
+    R('r32','Naked & Famous','shake','coupe','','Equal parts.',[
+      ING('0.75','oz',T('mezcal')), ING('0.75','oz',T('liqueur','yellow chartreuse')), ING('0.75','oz',T('amaro','aperol')), ING('0.75','oz',ST('lime'))]),
+    R('r33','Black Manhattan','stir','coupe','brandied cherry','Averna in place of vermouth.',[
+      ING('2','oz',T('whiskey','rye')), ING('1','oz',T('amaro','averna')), ING('2','dash',T('bitters','aromatic'))]),
+    R('r34','Rum Old Fashioned','stir','rocks','orange + lime twist','Demerara syrup preferred.',[
+      ING('2','oz',T('rum','aged')), ING('1','tsp',ST('sugar')), ING('2','dash',T('bitters','aromatic'))])
+  ];
+}
+
+/* ============================== state ============================== */
+let S = null;
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar" }; }
+function load(){
+  let raw = null;
+  try{ raw = localStorage.getItem(KEY); }catch(e){}
+  if(!raw) return fresh();
+  let d = null;
+  try{ d = JSON.parse(raw); }catch(e){}
+  if(!d || typeof d !== 'object' || d.v !== 1){
+    // migration guard: unknown/future schema -> keep a backup, start clean
+    try{ localStorage.setItem(KEY + '-backup', raw); }catch(e){}
+    return fresh();
+  }
+  if(!Array.isArray(d.bottles)) d.bottles = [];
+  if(!Array.isArray(d.recipes) || !d.recipes.length) d.recipes = seedRecipes();
+  if(!Array.isArray(d.staples)) d.staples = DEFAULT_STAPLES.slice();
+  if(typeof d.menuTitle !== 'string') d.menuTitle = "CJ's Bar";
+  return d;
+}
+let _saveT = null;
+function save(){ clearTimeout(_saveT); _saveT = setTimeout(()=>{ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }, 300); }
+function uid(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ============================== matcher ============================== */
+function norm(s){ return String(s==null?'':s).trim().toLowerCase(); }
+function tagKey(t){ return norm(t.category) + (t.subtype ? '/' + norm(t.subtype) : ''); }
+function tagLabel(t){
+  const k = norm(t.category) + '/' + norm(t.subtype||'');
+  if(TAG_LABELS[k]) return TAG_LABELS[k];
+  if(norm(t.category)==='mixer' && t.subtype) return norm(t.subtype);
+  return t.subtype ? norm(t.subtype) + ' ' + norm(t.category) : norm(t.category);
+}
+function bottleMatchesTag(b, tag){
+  if(norm(b.category) !== norm(tag.category)) return false;
+  if(tag.subtype && norm(b.subtype) !== norm(tag.subtype)) return false;
+  return true;
+}
+// -> { ok, low, kind, key, label }
+function reqStatus(req){
+  if(req.staple){
+    const ok = S.staples.some(s => norm(s) === norm(req.staple));
+    return { ok, low:false, kind:'staple', key:'staple:'+norm(req.staple), label:norm(req.staple) };
+  }
+  if(req.bottleId){
+    const b = S.bottles.find(x => x.id === req.bottleId);
+    const ok = !!b && b.level !== 'out';
+    return { ok, low: ok && b.level==='low', kind:'bottle', key:'bottle:'+req.bottleId, label: b ? b.name : 'a specific bottle' };
+  }
+  const tag = req.tag || {};
+  const matches = S.bottles.filter(b => b.level !== 'out' && bottleMatchesTag(b, tag));
+  const ok = matches.length > 0;
+  const low = ok && !matches.some(m => m.level === 'full'); // only low bottles can satisfy it
+  return { ok, low, kind:'tag', key:'tag:'+tagKey(tag), label: tagLabel(tag) };
+}
+// -> { makeable, low, missing:[{req,status}] }
+function recipeStatus(r){
+  const missing = []; let low = false;
+  for(const ing of r.ingredients){
+    const st = reqStatus(ing.req);
+    if(!st.ok) missing.push({ req: ing.req, status: st });
+    else if(st.low) low = true;
+  }
+  return { makeable: missing.length === 0, low: missing.length === 0 && low, missing };
+}
+// recipes missing exactly one non-staple req, grouped by that req
+function unlockGroups(){
+  const groups = {};
+  for(const r of S.recipes){
+    const st = recipeStatus(r);
+    if(st.missing.length !== 1) continue;
+    const m = st.missing[0];
+    if(m.status.kind === 'staple') continue;
+    const g = groups[m.status.key] || (groups[m.status.key] = { key:m.status.key, label:m.status.label, recipes:[] });
+    g.recipes.push(r.name);
+  }
+  return Object.values(groups).sort((a,b) => b.recipes.length - a.recipes.length || a.label.localeCompare(b.label));
+}
+
+/* ============================== bottle CRUD ============================== */
+function upsertBottle(b){
+  if(!b.id) b.id = uid('b');
+  b.name = (b.name||'').trim(); b.subtype = (b.subtype||'').trim();
+  if(!b.name || !CATEGORIES.includes(b.category)) return null;
+  if(!LEVELS.includes(b.level)) b.level = 'full';
+  const i = S.bottles.findIndex(x => x.id === b.id);
+  if(i >= 0) S.bottles[i] = b; else S.bottles.push(b);
+  save(); renderAll(); return b.id;
+}
+function deleteBottle(id){ S.bottles = S.bottles.filter(b => b.id !== id); save(); renderAll(); }
+function cycleLevel(id){
+  const b = S.bottles.find(x => x.id === id); if(!b) return;
+  b.level = LEVELS[(LEVELS.indexOf(b.level) + 1) % LEVELS.length];
+  save(); renderAll();
+}
+
+/* ============================== recipe CRUD ============================== */
+function upsertRecipe(r){
+  if(!r.id) r.id = uid('r');
+  r.name = (r.name||'').trim();
+  if(!r.name || !Array.isArray(r.ingredients) || !r.ingredients.length) return null;
+  const i = S.recipes.findIndex(x => x.id === r.id);
+  if(i >= 0) S.recipes[i] = r; else S.recipes.push(r);
+  save(); renderAll(); return r.id;
+}
+function deleteRecipe(id){ S.recipes = S.recipes.filter(r => r.id !== id); save(); renderAll(); }
+function recipeBase(r){
+  let first = null;
+  for(const ing of r.ingredients){
+    if(!ing.req.tag) continue;
+    const c = norm(ing.req.tag.category);
+    if(first === null) first = c;
+    if(SPIRITS.includes(c)) return c; // a real spirit wins over a leading liqueur/wine
+  }
+  return first || 'other';
+}
+function ingLabel(ing){
+  if(ing.req.staple) return norm(ing.req.staple);
+  if(ing.req.bottleId){ const b = S.bottles.find(x => x.id === ing.req.bottleId); return b ? b.name : 'a specific bottle'; }
+  return tagLabel(ing.req.tag||{});
+}
+function autoDesc(r){
+  return r.ingredients.filter(i => !(i.note||'').includes('optional')).map(ingLabel).join(', ');
+}
+
+/* ============================== export / import ============================== */
+function exportJSON(){ return JSON.stringify(S, null, 2); }
+function importJSON(text){
+  let d = null;
+  try{ d = JSON.parse(text); }catch(e){ return 'That file isn’t valid JSON.'; }
+  if(!d || d.v !== 1 || !Array.isArray(d.bottles) || !Array.isArray(d.recipes)) return 'That doesn’t look like a Home Bar backup.';
+  if(!Array.isArray(d.staples)) d.staples = DEFAULT_STAPLES.slice();
+  if(typeof d.menuTitle !== 'string') d.menuTitle = "CJ's Bar";
+  S = d; save(); renderAll(); return null;
+}
+function downloadBackup(){
+  const blob = new Blob([exportJSON()], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'home-bar-backup.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+}
+
+/* ============================== scan ============================== */
+function scanEnabled(){ return !!CFG.scanUrl; }
+async function requestScan(media_type, data){
+  const r = await fetch(CFG.scanUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ media_type, data }) });
+  let j = null; try{ j = await r.json(); }catch(e){}
+  if(!r.ok || !j || j.error) throw new Error((j && j.error) || ('scan failed: ' + r.status));
+  return Array.isArray(j.bottles) ? j.bottles : [];
+}
+// downscale to <=1568px long edge, jpeg q0.8; falls back to the raw file where canvas is unavailable
+function fileToScanPayload(file){
+  return new Promise((resolve, reject)=>{
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error('could not read the photo'));
+    fr.onload = () => {
+      const dataUrl = String(fr.result);
+      const raw = () => {
+        const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
+        if(!m) return reject(new Error('could not read the photo'));
+        resolve({ media_type: m[1], data: m[2] });
+      };
+      try{
+        const img = new Image();
+        img.onload = () => {
+          try{
+            const MAX = 1568;
+            const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+            const cv = document.createElement('canvas');
+            cv.width = Math.max(1, Math.round(img.width * scale));
+            cv.height = Math.max(1, Math.round(img.height * scale));
+            const cx = cv.getContext && cv.getContext('2d');
+            if(!cx) return raw();
+            cx.drawImage(img, 0, 0, cv.width, cv.height);
+            const out = cv.toDataURL('image/jpeg', 0.8);
+            const m = /^data:([^;]+);base64,(.*)$/.exec(out);
+            if(!m) return raw();
+            resolve({ media_type: m[1], data: m[2] });
+          }catch(e){ raw(); }
+        };
+        img.onerror = raw;
+        img.src = dataUrl;
+      }catch(e){ raw(); }
+    };
+    fr.readAsDataURL(file);
+  });
+}
+async function handleScanFile(file){
+  openModal('<h2>Reading the shelf&hellip;</h2><div class="small mut">The AI is squinting at your labels. ~15 seconds.</div><div class="spin"></div>');
+  try{
+    const payload = await fileToScanPayload(file);
+    const bottles = await requestScan(payload.media_type, payload.data);
+    if(!bottles.length){ closeModal(); toast('No bottles spotted — try a closer, brighter photo.'); return; }
+    openConfirmSheet(bottles);
+  }catch(e){
+    closeModal(); toast('Scan failed — check your connection and try again.');
+  }
+}
+function openConfirmSheet(bottles){
+  const rows = bottles.map((b, i) => {
+    const cat = CATEGORIES.includes(norm(b.category)) ? norm(b.category) : 'other';
+    const dup = S.bottles.some(x => norm(x.name) === norm(b.name));
+    return { name: b.name || 'Mystery bottle', category: cat, subtype: norm(b.subtype||''), level: LEVELS.includes(b.level) ? b.level : 'full', dup, checked: !dup, i };
+  });
+  const html = ['<button class="mclose" onclick="closeModal()">&times;</button><h2>Found on the shelf</h2>',
+    '<div class="small mut" style="margin-bottom:10px">Untick anything it got wrong, or fix the details before adding.</div>'];
+  for(const r of rows){
+    html.push('<div class="scanrow" data-i="', r.i, '">',
+      '<input type="checkbox" class="sr-ck"', r.checked ? ' checked' : '', '>',
+      '<div class="grow">',
+        '<input class="sr-name" value="', esc(r.name), '" style="margin-bottom:5px">',
+        '<div class="formrow">', catSelect('sr-cat', r.category), subInput('sr-sub', r.category, r.subtype), lvlSelect('sr-lvl', r.level), '</div>',
+        r.dup ? '<div class="dup">already on the shelf</div>' : '',
+      '</div></div>');
+  }
+  html.push('<button class="abtn" id="sr-commit" style="width:100%;margin-top:8px"></button>');
+  openModal(html.join(''));
+  const wrap = document.getElementById('modal');
+  const update = () => {
+    const n = wrap.querySelectorAll('.sr-ck:checked').length;
+    const btn = document.getElementById('sr-commit');
+    btn.textContent = n ? ('Add ' + n + ' bottle' + (n===1?'':'s')) : 'Nothing selected';
+    btn.disabled = !n;
+  };
+  wrap.querySelectorAll('.sr-ck').forEach(ck => ck.addEventListener('change', update));
+  update();
+  document.getElementById('sr-commit').onclick = () => {
+    let added = 0;
+    wrap.querySelectorAll('.scanrow').forEach(row => {
+      if(!row.querySelector('.sr-ck').checked) return;
+      const id = upsertBottle({
+        name: row.querySelector('.sr-name').value,
+        category: row.querySelector('.sr-cat').value,
+        subtype: row.querySelector('.sr-sub').value,
+        level: row.querySelector('.sr-lvl').value
+      });
+      if(id) added++;
+    });
+    closeModal();
+    toast(added ? ('Added ' + added + ' bottle' + (added===1?'':'s') + ' to the shelf.') : 'Nothing added.');
+  };
+}
+
+/* ============================== rendering ============================== */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function stars(n){ let s=''; for(let i=1;i<=5;i++) s += i<=n ? '★' : '☆'; return s; }
+let tab = 'shelf';
+let specFilter = 'all';
+let makeableOnly = false;
+let shelfQuery = '';
+
+function setTab(t){
+  tab = t;
+  document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('section.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + t));
+  document.body.classList.toggle('menuMode', t === 'menu');
+  renderAll();
+  window.scrollTo(0,0);
+}
+function renderAll(){
+  if(tab === 'shelf') renderShelf();
+  if(tab === 'specs') renderSpecs();
+  if(tab === 'tonight') renderTonight();
+  if(tab === 'menu') renderMenu();
+}
+function renderShelf(){
+  const list = document.getElementById('shelf-list');
+  const empty = document.getElementById('empty-shelf');
+  document.getElementById('btn-scan').classList.toggle('hidden', !scanEnabled());
+  document.getElementById('btn-scan-empty').classList.toggle('hidden', !scanEnabled());
+  const q = norm(shelfQuery);
+  const bottles = S.bottles.filter(b => !q || norm(b.name).includes(q) || norm(b.subtype).includes(q));
+  empty.classList.toggle('hidden', S.bottles.length > 0);
+  document.getElementById('shelf-tools').classList.toggle('hidden', S.bottles.length === 0);
+  if(!bottles.length){ list.innerHTML = S.bottles.length ? '<div class="dim" style="padding:20px 4px">Nothing matches.</div>' : ''; return; }
+  const byCat = {};
+  for(const b of bottles) (byCat[b.category] = byCat[b.category] || []).push(b);
+  const html = [];
+  for(const cat of CATEGORIES){
+    if(!byCat[cat]) continue;
+    html.push('<div class="cathead">', esc(cat), '</div>');
+    for(const b of byCat[cat].sort((a,z)=>a.name.localeCompare(z.name))){
+      html.push('<div class="bottle ', b.level, '" data-id="', b.id, '">',
+        '<div class="grow"><div class="bname">', esc(b.name), '</div>',
+        b.subtype ? '<div class="bsub">' + esc(b.subtype) + '</div>' : '',
+        '</div><span class="lvl ', b.level, '">', b.level, '</span>',
+        '<button class="editb" data-edit="', b.id, '" title="Edit">&#9998;</button></div>');
+    }
+  }
+  list.innerHTML = html.join('');
+  list.querySelectorAll('.bottle').forEach(el => el.addEventListener('click', e => {
+    if(e.target.closest('.editb')) return;
+    cycleLevel(el.dataset.id);
+  }));
+  list.querySelectorAll('.editb').forEach(el => el.addEventListener('click', () => openBottleForm(el.dataset.edit)));
+}
+function renderSpecs(){
+  const bases = Array.from(new Set(S.recipes.map(recipeBase))).sort();
+  const fEl = document.getElementById('spec-filters');
+  const chips = ['<span class="chip' + (specFilter==='all'?' on':'') + '" data-f="all">All</span>'];
+  for(const b of bases) chips.push('<span class="chip' + (specFilter===b?' on':'') + '" data-f="' + esc(b) + '">' + esc(b) + '</span>');
+  chips.push('<span class="chip' + (makeableOnly?' on':'') + '" data-f="__mk">Makeable only</span>');
+  fEl.innerHTML = chips.join('');
+  fEl.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+    const f = c.dataset.f;
+    if(f === '__mk') makeableOnly = !makeableOnly; else specFilter = f;
+    renderSpecs();
+  }));
+  const list = document.getElementById('spec-list');
+  const html = [];
+  const rs = S.recipes.slice().sort((a,z)=>a.name.localeCompare(z.name));
+  for(const r of rs){
+    if(specFilter !== 'all' && recipeBase(r) !== specFilter) continue;
+    const st = recipeStatus(r);
+    if(makeableOnly && !st.makeable) continue;
+    html.push('<div class="card rcard" data-id="', r.id, '">',
+      '<span class="mdot', st.makeable ? (st.low?' lw':' mk') : '', '"></span>',
+      '<div class="grow"><span class="rname">', r.house ? '<span class="housestar">★</span>' : '', esc(r.name), '</span>',
+      '<div class="small mut">', esc(recipeBase(r)), ' &middot; ', esc(r.method), '</div></div>',
+      '<span class="stars">', stars(r.rating||0), '</span></div>');
+  }
+  list.innerHTML = html.length ? html.join('') : '<div class="dim" style="padding:20px 4px">No recipes match.</div>';
+  list.querySelectorAll('.rcard').forEach(el => el.addEventListener('click', () => openRecipeDetail(el.dataset.id)));
+}
+function renderTonight(){
+  const mk = [], lows = [];
+  for(const r of S.recipes){
+    const st = recipeStatus(r);
+    if(st.makeable) mk.push({ r, low: st.low });
+  }
+  mk.sort((a,z) => (z.r.rating||0) - (a.r.rating||0) || a.r.name.localeCompare(z.r.name));
+  const mkEl = document.getElementById('makeable-list');
+  mkEl.innerHTML = mk.length ? mk.map(x =>
+    '<div class="card rcard tonight-item" data-id="' + x.r.id + '">' +
+    '<div class="grow"><span class="rname">' + (x.r.house?'<span class="housestar">★</span>':'') + esc(x.r.name) + '</span>' +
+    (x.low ? ' <span class="lowtag">running low</span>' : '') +
+    '<div class="small mut">' + esc(autoDesc(x.r)) + '</div></div>' +
+    '<span class="stars">' + stars(x.r.rating||0) + '</span></div>'
+  ).join('') : '<div class="card dim">Nothing yet — stock the shelf and this fills itself in.</div>';
+  mkEl.querySelectorAll('.tonight-item').forEach(el => el.addEventListener('click', () => openRecipeDetail(el.dataset.id)));
+
+  const groups = unlockGroups();
+  document.getElementById('unlock-list').innerHTML = groups.length ? groups.map(g =>
+    '<div class="card unlock"><span class="buy">Buy ' + esc(g.label) + '</span>' +
+    ' <span class="mut">&rarr; unlocks ' + esc(g.recipes.join(', ')) + ' (' + g.recipes.length + ')</span></div>'
+  ).join('') : '<div class="card dim">No single-bottle unlocks right now.</div>';
+
+  const shop = [];
+  for(const g of groups) shop.push('<div class="shopline"><span class="brass">&#9679;</span><span>' + esc(g.label) + ' <span class="dim small">unlocks ' + g.recipes.length + '</span></span></div>');
+  for(const b of S.bottles.filter(b => b.level === 'low')) shop.push('<div class="shopline"><span style="color:var(--low)">&#9679;</span><span>' + esc(b.name) + ' <span class="dim small">running low</span></span></div>');
+  for(const b of S.bottles.filter(b => b.level === 'out')) shop.push('<div class="shopline"><span style="color:var(--out)">&#9679;</span><span>' + esc(b.name) + ' <span class="dim small">out</span></span></div>');
+  document.getElementById('shopping-list').innerHTML = shop.length ? '<div class="card">' + shop.join('') + '</div>' : '<div class="card dim">Nothing needed. Impressive shelf.</div>';
+}
+function renderMenu(){
+  const items = [];
+  for(const r of S.recipes){
+    const st = recipeStatus(r);
+    if(st.makeable) items.push(r);
+  }
+  items.sort((a,z) => (z.house?1:0) - (a.house?1:0) || (z.rating||0) - (a.rating||0) || a.name.localeCompare(z.name));
+  const html = ['<div class="menu-head">', esc(S.menuTitle), '</div>',
+    '<hr class="menu-rule"><div class="menu-sub">this evening’s pours</div>'];
+  if(!items.length) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
+  for(const r of items){
+    html.push('<div class="mitem"><div class="mname">', r.house ? '<span class="housestar">★</span>' : '', esc(r.name), '</div>',
+      '<div class="mdesc">', esc(autoDesc(r) || (r.notes||'').trim()), '</div></div>');
+  }
+  document.getElementById('menu-body').innerHTML = html.join('');
+}
+
+/* ============================== forms & sheets ============================== */
+function openModal(html){ document.getElementById('modal').innerHTML = html; document.getElementById('modalwrap').classList.add('on'); }
+function closeModal(){ document.getElementById('modalwrap').classList.remove('on'); document.getElementById('modal').innerHTML = ''; }
+let _toastT = null;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(_toastT); _toastT = setTimeout(()=>t.classList.remove('on'), 2600);
+}
+function catSelect(cls, val){
+  return '<select class="' + cls + '">' + CATEGORIES.map(c => '<option' + (c===val?' selected':'') + '>' + c + '</option>').join('') + '</select>';
+}
+function subInput(cls, cat, val){
+  const listId = 'dl-' + cls + '-' + Math.random().toString(36).slice(2,7);
+  return '<span style="flex:1"><input class="' + cls + '" list="' + listId + '" placeholder="subtype" value="' + esc(val||'') + '">' +
+    '<datalist id="' + listId + '">' + (SUBTYPES[cat]||[]).map(s => '<option value="' + esc(s) + '">').join('') + '</datalist></span>';
+}
+function lvlSelect(cls, val){
+  return '<select class="' + cls + '">' + LEVELS.map(l => '<option' + (l===val?' selected':'') + '>' + l + '</option>').join('') + '</select>';
+}
+function openBottleForm(id){
+  const b = id ? S.bottles.find(x => x.id === id) : { name:'', category:'whiskey', subtype:'', level:'full', notes:'' };
+  if(!b) return;
+  openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>' + (id?'Edit bottle':'Add a bottle') + '</h2>' +
+    '<label class="fieldlbl">Name</label><input id="bf-name" value="' + esc(b.name) + '" placeholder="e.g. Mijenta Reposado">' +
+    '<label class="fieldlbl">Category</label>' + catSelect('bf-cat', b.category) +
+    '<label class="fieldlbl">Subtype <span class="dim">(matches recipes — pick from the list when you can)</span></label>' + subInput('bf-sub', b.category, b.subtype) +
+    '<label class="fieldlbl">Level</label><div class="seg" id="bf-lvl">' + LEVELS.map(l => '<button data-l="' + l + '"' + (l===b.level?' class="on"':'') + '>' + l + '</button>').join('') + '</div>' +
+    '<label class="fieldlbl">Notes</label><textarea id="bf-notes" rows="2">' + esc(b.notes||'') + '</textarea>' +
+    '<div style="display:flex;gap:8px;margin-top:16px">' +
+      (id ? '<button class="abtn danger" id="bf-del">Delete</button>' : '') +
+      '<button class="abtn" id="bf-save" style="flex:1">Save bottle</button></div>');
+  let level = b.level;
+  const wrap = document.getElementById('modal');
+  wrap.querySelector('.bf-cat').addEventListener('change', e => {
+    const holder = wrap.querySelector('.bf-sub').parentNode;
+    holder.outerHTML = subInput('bf-sub', e.target.value, '');
+  });
+  document.getElementById('bf-lvl').addEventListener('click', e => {
+    const btn = e.target.closest('button'); if(!btn) return;
+    level = btn.dataset.l;
+    document.querySelectorAll('#bf-lvl button').forEach(x => x.classList.toggle('on', x === btn));
+  });
+  document.getElementById('bf-save').onclick = () => {
+    const ok = upsertBottle({ id: id || undefined, name: document.getElementById('bf-name').value,
+      category: wrap.querySelector('.bf-cat').value, subtype: wrap.querySelector('.bf-sub').value,
+      level, notes: document.getElementById('bf-notes').value });
+    if(!ok){ toast('Give it a name first.'); return; }
+    closeModal();
+  };
+  const del = document.getElementById('bf-del');
+  if(del) del.onclick = () => { if(confirm('Remove this bottle?')){ deleteBottle(id); closeModal(); } };
+}
+function openRecipeDetail(id){
+  const r = S.recipes.find(x => x.id === id); if(!r) return;
+  const st = recipeStatus(r);
+  const missKeys = new Set(st.missing.map(m => m.status.key));
+  const ingHtml = r.ingredients.map(ing => {
+    const s = reqStatus(ing.req);
+    return '<div class="ing-line' + (s.ok ? '' : ' miss') + '"><span class="qty">' + esc(ing.qty||'') + ' ' + esc(ing.unit||'') + '</span>' +
+      '<span class="lbl">' + esc(ingLabel(ing)) + (ing.note ? ' <span class="dim small">(' + esc(ing.note) + ')</span>' : '') +
+      (s.ok ? (s.low ? ' <span class="lowtag">low</span>' : '') : ' <span class="small" style="color:var(--bad)">missing</span>') + '</span></div>';
+  }).join('');
+  openModal('<button class="mclose" onclick="closeModal()">&times;</button>' +
+    '<h2>' + (r.house?'<span class="housestar">★</span> ':'') + esc(r.name) + '</h2>' +
+    '<div class="detmeta">' + esc(r.method) + ' &middot; ' + esc(r.glass||'') + (r.garnish ? ' &middot; ' + esc(r.garnish) : '') + '</div>' +
+    '<div class="starpick" id="rd-stars">' + [1,2,3,4,5].map(i => '<span data-s="' + i + '" class="' + (i<=(r.rating||0)?'lit':'') + '">★</span>').join('') + '</div>' +
+    '<hr class="sep">' + ingHtml +
+    '<label class="fieldlbl">Notes</label><textarea id="rd-notes" rows="2">' + esc(r.notes||'') + '</textarea>' +
+    '<div class="rowline" style="margin-top:12px"><label class="rowline" style="gap:7px"><input type="checkbox" id="rd-house" style="width:auto"' + (r.house?' checked':'') + '> House drink <span class="housestar">★</span></label></div>' +
+    '<div style="display:flex;gap:8px;margin-top:16px">' +
+      '<button class="abtn danger" id="rd-del">Delete</button>' +
+      '<button class="abtn ghost" id="rd-edit">Edit spec</button>' +
+      '<button class="abtn" id="rd-done" style="flex:1">Done</button></div>');
+  document.getElementById('rd-stars').addEventListener('click', e => {
+    const s = e.target.closest('[data-s]'); if(!s) return;
+    r.rating = (+s.dataset.s === r.rating) ? 0 : +s.dataset.s;
+    document.querySelectorAll('#rd-stars [data-s]').forEach(el => el.classList.toggle('lit', +el.dataset.s <= (r.rating||0)));
+    save();
+  });
+  document.getElementById('rd-house').addEventListener('change', e => { r.house = e.target.checked; save(); });
+  document.getElementById('rd-notes').addEventListener('change', e => { r.notes = e.target.value; save(); });
+  document.getElementById('rd-done').onclick = () => { closeModal(); renderAll(); };
+  document.getElementById('rd-edit').onclick = () => openRecipeForm(id);
+  document.getElementById('rd-del').onclick = () => { if(confirm('Delete this recipe?')){ deleteRecipe(id); closeModal(); } };
+}
+function ingRowHtml(ing){
+  const req = ing && ing.req || { tag:{ category:'whiskey' } };
+  const kind = req.staple ? 'staple' : (req.bottleId ? 'bottleId' : 'tag');
+  const cat = req.tag ? norm(req.tag.category) : 'whiskey';
+  return '<div class="ingrow">' +
+    '<div class="formrow"><input class="ir-qty" placeholder="qty" value="' + esc(ing?ing.qty:'') + '" style="max-width:80px">' +
+    '<select class="ir-unit">' + UNITS.map(u => '<option' + (ing && ing.unit===u?' selected':'') + '>' + u + '</option>').join('') + '</select>' +
+    '<select class="ir-kind"><option value="tag"' + (kind==='tag'?' selected':'') + '>bottle type</option>' +
+      '<option value="bottleId"' + (kind==='bottleId'?' selected':'') + '>specific bottle</option>' +
+      '<option value="staple"' + (kind==='staple'?' selected':'') + '>staple</option></select></div>' +
+    '<div class="formrow ir-body">' + ingBodyHtml(kind, req, cat) + '</div>' +
+    '<div class="rowline"><input class="ir-note" placeholder="note (optional)" value="' + esc(ing && ing.note || '') + '" style="flex:1;margin-right:8px">' +
+    '<button class="del ir-del">remove</button></div></div>';
+}
+function ingBodyHtml(kind, req, cat){
+  if(kind === 'staple'){
+    const v = req.staple || S.staples[0] || '';
+    return '<select class="ir-staple">' + S.staples.map(s => '<option' + (norm(s)===norm(v)?' selected':'') + '>' + esc(s) + '</option>').join('') + '</select>';
+  }
+  if(kind === 'bottleId'){
+    if(!S.bottles.length) return '<div class="dim small" style="padding:8px 2px">No bottles on the shelf yet.</div>';
+    return '<select class="ir-bottle">' + S.bottles.map(b => '<option value="' + b.id + '"' + (req.bottleId===b.id?' selected':'') + '>' + esc(b.name) + '</option>').join('') + '</select>';
+  }
+  return catSelect('ir-cat', cat) + subInput('ir-sub', cat, req.tag && req.tag.subtype || '');
+}
+function openRecipeForm(id){
+  const r = id ? S.recipes.find(x => x.id === id) : { name:'', method:'shake', glass:'coupe', garnish:'', notes:'', rating:0, house:false, ingredients:[null] };
+  if(!r) return;
+  openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>' + (id?'Edit recipe':'New recipe') + '</h2>' +
+    '<label class="fieldlbl">Name</label><input id="rf-name" value="' + esc(r.name) + '" placeholder="e.g. House Coquito">' +
+    '<div class="formrow"><span><label class="fieldlbl">Method</label><select id="rf-method">' + ['stir','shake','build','blend'].map(m => '<option' + (m===r.method?' selected':'') + '>' + m + '</option>').join('') + '</select></span>' +
+    '<span><label class="fieldlbl">Glass</label><input id="rf-glass" value="' + esc(r.glass||'') + '" placeholder="coupe, rocks…"></span></div>' +
+    '<label class="fieldlbl">Garnish</label><input id="rf-garnish" value="' + esc(r.garnish||'') + '">' +
+    '<label class="fieldlbl">Ingredients</label><div id="rf-ings">' + r.ingredients.map(ingRowHtml).join('') + '</div>' +
+    '<button class="abtn ghost" id="rf-adding" style="width:100%">+ ingredient</button>' +
+    '<label class="fieldlbl">Notes</label><textarea id="rf-notes" rows="2">' + esc(r.notes||'') + '</textarea>' +
+    '<label class="rowline" style="gap:7px;margin-top:12px"><input type="checkbox" id="rf-house" style="width:auto"' + (r.house?' checked':'') + '> House drink <span class="housestar">★</span></label>' +
+    '<button class="abtn" id="rf-save" style="width:100%;margin-top:16px">Save recipe</button>');
+  const ings = document.getElementById('rf-ings');
+  const wire = row => {
+    row.querySelector('.ir-kind').addEventListener('change', e => {
+      row.querySelector('.ir-body').innerHTML = ingBodyHtml(e.target.value, {}, 'whiskey');
+      wireBody(row);
+    });
+    row.querySelector('.ir-del').addEventListener('click', () => { if(ings.children.length > 1) row.remove(); });
+    wireBody(row);
+  };
+  const wireBody = row => {
+    const catSel = row.querySelector('.ir-cat');
+    if(catSel) catSel.addEventListener('change', e => {
+      row.querySelector('.ir-sub').parentNode.outerHTML = subInput('ir-sub', e.target.value, '');
+    });
+  };
+  ings.querySelectorAll('.ingrow').forEach(wire);
+  document.getElementById('rf-adding').onclick = () => {
+    ings.insertAdjacentHTML('beforeend', ingRowHtml(null));
+    wire(ings.lastElementChild);
+  };
+  document.getElementById('rf-save').onclick = () => {
+    const ingredients = [];
+    ings.querySelectorAll('.ingrow').forEach(row => {
+      const kind = row.querySelector('.ir-kind').value;
+      let req = null;
+      if(kind === 'staple'){ const el = row.querySelector('.ir-staple'); if(el) req = { staple: el.value }; }
+      else if(kind === 'bottleId'){ const el = row.querySelector('.ir-bottle'); if(el) req = { bottleId: el.value }; }
+      else {
+        const cat = row.querySelector('.ir-cat').value, sub = row.querySelector('.ir-sub').value.trim();
+        req = sub ? { tag:{ category:cat, subtype:sub } } : { tag:{ category:cat } };
+      }
+      if(!req) return;
+      const ing = { qty: row.querySelector('.ir-qty').value.trim(), unit: row.querySelector('.ir-unit').value, req };
+      const note = row.querySelector('.ir-note').value.trim(); if(note) ing.note = note;
+      ingredients.push(ing);
+    });
+    const ok = upsertRecipe({ id: id || undefined, name: document.getElementById('rf-name').value,
+      method: document.getElementById('rf-method').value, glass: document.getElementById('rf-glass').value.trim(),
+      garnish: document.getElementById('rf-garnish').value.trim(), notes: document.getElementById('rf-notes').value,
+      rating: r.rating||0, house: document.getElementById('rf-house').checked, ingredients });
+    if(!ok){ toast('A recipe needs a name and at least one ingredient.'); return; }
+    closeModal();
+  };
+}
+function openSettings(){
+  openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>Settings</h2>' +
+    '<label class="fieldlbl">Menu title <span class="dim">(shown in guest Menu mode)</span></label><input id="st-title" value="' + esc(S.menuTitle) + '">' +
+    '<label class="fieldlbl">Staples <span class="dim">(always in the house — comma separated)</span></label>' +
+    '<textarea id="st-staples" rows="3">' + esc(S.staples.join(', ')) + '</textarea>' +
+    '<hr class="sep"><h3 class="serif" style="color:var(--brass2)">Backup</h3>' +
+    '<div class="small mut" style="margin:4px 0 10px">Your bar lives only in this browser — export a backup now and then.</div>' +
+    '<div style="display:flex;gap:8px"><button class="abtn ghost" id="st-export" style="flex:1">Export JSON</button>' +
+    '<button class="abtn ghost" id="st-import" style="flex:1">Import JSON</button></div>' +
+    '<hr class="sep"><button class="abtn danger" id="st-reset" style="width:100%">Reset everything</button>' +
+    '<button class="abtn" id="st-done" style="width:100%;margin-top:10px">Done</button>');
+  document.getElementById('st-export').onclick = downloadBackup;
+  document.getElementById('st-import').onclick = () => document.getElementById('import-file').click();
+  document.getElementById('st-reset').onclick = () => {
+    if(confirm('Wipe every bottle, recipe edit, and setting?')){
+      S = fresh(); save(); closeModal(); renderAll(); toast('Fresh start.');
+    }
+  };
+  document.getElementById('st-done').onclick = () => {
+    S.menuTitle = document.getElementById('st-title').value.trim() || "CJ's Bar";
+    S.staples = document.getElementById('st-staples').value.split(',').map(s => s.trim()).filter(Boolean);
+    save(); closeModal(); renderAll();
+  };
+}
+
+/* ============================== boot ============================== */
+S = load();
+save();
+document.getElementById('btn-settings').addEventListener('click', openSettings);
+document.getElementById('btn-addbottle').addEventListener('click', () => openBottleForm(null));
+document.getElementById('btn-add-empty').addEventListener('click', () => openBottleForm(null));
+document.getElementById('btn-addrecipe').addEventListener('click', () => openRecipeForm(null));
+document.getElementById('btn-scan').addEventListener('click', () => document.getElementById('scan-file').click());
+document.getElementById('btn-scan-empty').addEventListener('click', () => document.getElementById('scan-file').click());
+document.getElementById('scan-file').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(f) handleScanFile(f);
+});
+document.getElementById('import-file').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!f) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    const err = importJSON(String(fr.result));
+    if(err) toast(err); else { closeModal(); toast('Backup restored.'); }
+  };
+  fr.readAsText(f);
+});
+document.getElementById('shelf-search').addEventListener('input', e => { shelfQuery = e.target.value; renderShelf(); });
+document.getElementById('menu-exit').addEventListener('click', () => setTab('shelf'));
+document.querySelectorAll('#tabbar button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+document.getElementById('modalwrap').addEventListener('click', e => { if(e.target.id === 'modalwrap') closeModal(); });
+setTab('shelf');
+</script>
+</body>
+</html>

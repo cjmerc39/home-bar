@@ -1,0 +1,204 @@
+const { JSDOM } = require('jsdom');
+const fs = require('fs');
+const html = fs.readFileSync('index.html', 'utf8');
+const errors = [];
+const dom = new JSDOM(html, {
+  runScripts: 'dangerously', url: 'https://example.com/',
+  beforeParse(w){ w.TextEncoder=TextEncoder; w.TextDecoder=TextDecoder; w.confirm=()=>true; w.scrollTo=()=>{};
+    w.fetch = async (url) => {
+      if(String(url).includes('/scan')) return { ok:true, status:200, json: async () => (w.__scanResult || { bottles: [] }) };
+      return { ok:false, status:404, json: async () => ({ error:'not found' }) };
+    }; },
+});
+dom.window.addEventListener('error', e => errors.push(e.message));
+const w = dom.window, d = w.document;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+(async () => {
+  await sleep(150);
+  const assert = (c,m)=>{ if(!c){console.error('FAIL:',m); process.exitCode=1;} else console.log('ok  :',m); };
+  const reset = () => w.eval('S = fresh(); save(); setTab("shelf");');
+
+  // --- boot ---
+  assert(errors.length===0, 'no runtime errors on boot'+(errors.length?' -> '+errors.join(' | '):''));
+  assert(w.eval('S.recipes.length')===34, 'seeds 34 classic recipes');
+  assert(w.eval('S.bottles.length')===0, 'shelf starts empty (no seed bottles)');
+  assert(w.eval('S.staples.includes("lime") && S.staples.includes("coconut cream")'), 'default staples loaded');
+  assert(!d.getElementById('empty-shelf').classList.contains('hidden'), 'empty-shelf invite shown on first run');
+  assert(!d.getElementById('btn-scan-empty').classList.contains('hidden'), 'scan button offered when SCAN_URL configured');
+
+  // --- graceful degradation: no scan URL -> button hidden ---
+  w.eval('CFG.scanUrl=""; renderShelf();');
+  assert(d.getElementById('btn-scan-empty').classList.contains('hidden'), 'scan button hidden when scan URL empty');
+  w.eval('CFG.scanUrl=SCAN_URL; renderShelf();');
+
+  // --- matcher: tag/subtype semantics (acceptance: tequila/reposado) ---
+  w.eval('upsertBottle({name:"Mijenta Reposado", category:"tequila", subtype:"reposado", level:"full"})');
+  assert(w.eval('reqStatus({tag:{category:"tequila"}}).ok')===true, 'plain {tequila} tag matches a reposado bottle');
+  assert(w.eval('reqStatus({tag:{category:"tequila",subtype:"reposado"}}).ok')===true, '{tequila/reposado} tag matches it too');
+  assert(w.eval('reqStatus({tag:{category:"tequila",subtype:"blanco"}}).ok')===false, '{tequila/blanco} does not match a reposado');
+  assert(w.eval('reqStatus({tag:{category:"tequila",subtype:"REPOSADO "}}).ok')===true, 'subtype match is case/space-insensitive');
+  assert(w.eval('reqStatus({staple:"lime"}).ok')===true, 'staple req matches staples list');
+  assert(w.eval('reqStatus({staple:"unicorn tears"}).ok')===false, 'unknown staple does not match');
+
+  // Tommy's Margarita = tequila + lime + agave -> makeable with one bottle
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.id==="r11")).makeable')===true, "Tommy's Margarita makeable with tequila + staples");
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.id==="r10")).missing.length')===1, 'Margarita missing exactly one req (orange liqueur)');
+  const ul1 = w.eval('JSON.stringify(unlockGroups())');
+  assert(JSON.parse(ul1).some(g=>g.key==='tag:liqueur/orange' && g.recipes.includes('Margarita')), 'unlocks suggests orange liqueur for Margarita');
+
+  // --- bottleId req ---
+  const mjId = w.eval('S.bottles[0].id');
+  assert(w.eval('reqStatus({bottleId:"'+mjId+'"}).ok')===true, 'bottleId req matches the stocked bottle');
+  assert(w.eval('reqStatus({bottleId:"nope"}).ok')===false, 'bottleId req fails for unknown id');
+
+  // --- unlock grouping (acceptance: sweet vermouth -> Manhattan, Negroni, Boulevardier) ---
+  w.eval('upsertBottle({name:"Eagle Rare", category:"whiskey", subtype:"bourbon", level:"full"})');
+  w.eval('upsertBottle({name:"Rittenhouse Rye", category:"whiskey", subtype:"rye", level:"full"})');
+  w.eval('upsertBottle({name:"Sipsmith", category:"gin", subtype:"london dry", level:"full"})');
+  w.eval('upsertBottle({name:"Campari", category:"amaro", subtype:"campari", level:"full"})');
+  w.eval('upsertBottle({name:"Angostura", category:"bitters", subtype:"aromatic", level:"full"})');
+  const groups = JSON.parse(w.eval('JSON.stringify(unlockGroups())'));
+  const sv = groups.find(g=>g.key==='tag:vermouth/sweet');
+  assert(!!sv && sv.recipes.length===3 && ['Manhattan','Negroni','Boulevardier'].every(n=>sv.recipes.includes(n)),
+    'sweet vermouth unlock groups Manhattan+Negroni+Boulevardier (3)');
+  assert(groups[0].key==='tag:vermouth/sweet', 'unlock groups sorted by count desc (sweet vermouth first)');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Old Fashioned")).makeable')===true, 'Old Fashioned makeable with bourbon+bitters');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Gimlet")).makeable')===true, 'Gimlet makeable with gin+staples');
+
+  // --- missing staple is NOT an unlock ---
+  w.eval('S.staples = S.staples.filter(s=>s!=="lime"); renderAll();');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Gimlet")).makeable')===false, 'removing lime staple breaks the Gimlet');
+  assert(!JSON.parse(w.eval('JSON.stringify(unlockGroups())')).some(g=>g.key==='staple:lime'), 'a missing staple never appears in unlocks');
+  w.eval('S.staples.push("lime"); save(); renderAll();');
+
+  // --- low-warning state ---
+  const ginId = w.eval('S.bottles.find(b=>b.name==="Sipsmith").id');
+  w.eval('cycleLevel("'+ginId+'")'); // full -> low
+  assert(w.eval('S.bottles.find(b=>b.id==="'+ginId+'").level')==='low', 'cycleLevel steps full -> low');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Gimlet")).makeable')===true
+      && w.eval('recipeStatus(S.recipes.find(r=>r.name==="Gimlet")).low')===true, 'Gimlet makeable-but-low when only gin is low');
+
+  // --- acceptance: cycle to "out" -> recipe leaves Makeable instantly ---
+  w.eval('S.recipes.find(r=>r.name==="Gimlet").rating=5; save();');
+  w.eval('setTab("tonight")');
+  assert(d.querySelector('#makeable-list .tonight-item .rname').textContent.includes('Gimlet'), 'Tonight sorts by rating (Gimlet 5★ first)');
+  assert(d.querySelector('#makeable-list .lowtag')!==null, 'low warning marked in Tonight');
+  w.eval('cycleLevel("'+ginId+'")'); // low -> out
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Gimlet")).makeable')===false, 'gin out -> Gimlet no longer makeable');
+  assert(![...d.querySelectorAll('#makeable-list .rname')].some(el=>el.textContent.includes('Gimlet')), 'Gimlet left the Makeable list instantly');
+  assert([...d.querySelectorAll('#shopping-list .shopline')].some(el=>/Sipsmith/.test(el.textContent)&&/out/.test(el.textContent)), 'out bottle lands on the shopping list');
+  w.eval('cycleLevel("'+ginId+'")'); // out -> full
+
+  // --- shelf UI: tap row cycles, edit sheet saves ---
+  w.eval('setTab("shelf")');
+  const row = [...d.querySelectorAll('.bottle')].find(el=>el.textContent.includes('Campari'));
+  row.click(); await sleep(30);
+  assert(w.eval('S.bottles.find(b=>b.name==="Campari").level')==='low', 'tapping a bottle row cycles its level');
+  const row2 = [...d.querySelectorAll('.bottle')].find(el=>el.textContent.includes('Campari'));
+  row2.querySelector('.editb').click(); await sleep(30);
+  assert(d.querySelector('#modalwrap').classList.contains('on'), 'edit button opens the bottle sheet');
+  d.getElementById('bf-name').value = 'Campari Bitter';
+  d.getElementById('bf-save').click(); await sleep(30);
+  assert(w.eval('S.bottles.some(b=>b.name==="Campari Bitter")'), 'bottle edit saves a new name');
+
+  // --- add bottle via UI form ---
+  d.getElementById('btn-addbottle').click(); await sleep(30);
+  d.getElementById('bf-name').value = 'Fever-Tree Ginger Beer';
+  d.querySelector('#modal .bf-cat').value = 'mixer';
+  d.querySelector('#modal .bf-sub').value = 'ginger beer';
+  d.getElementById('bf-save').click(); await sleep(30);
+  assert(w.eval('S.bottles.some(b=>b.name==="Fever-Tree Ginger Beer" && b.category==="mixer")'), 'add-bottle form creates a mixer bottle');
+
+  // --- recipe CRUD via UI form ---
+  w.eval('setTab("specs")');
+  const specCount = d.querySelectorAll('#spec-list .rcard').length;
+  assert(specCount===34, 'specs tab renders all 34 recipe cards');
+  d.getElementById('btn-addrecipe').click(); await sleep(30);
+  d.getElementById('rf-name').value = 'House Coquito';
+  const ir = d.querySelector('#rf-ings .ingrow');
+  ir.querySelector('.ir-qty').value = '2';
+  ir.querySelector('.ir-kind').value = 'staple';
+  ir.querySelector('.ir-kind').dispatchEvent(new w.Event('change'));
+  await sleep(20);
+  ir.querySelector('.ir-staple').value = 'coconut cream';
+  d.getElementById('rf-house').checked = true;
+  d.getElementById('rf-save').click(); await sleep(30);
+  assert(w.eval('S.recipes.length')===35 && w.eval('S.recipes.some(r=>r.name==="House Coquito" && r.house===true)'), 'recipe form saves a new house recipe');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="House Coquito")).makeable')===true, 'staple-only recipe is immediately makeable');
+  const coqId = w.eval('S.recipes.find(r=>r.name==="House Coquito").id');
+  w.eval('openRecipeDetail("'+coqId+'")'); await sleep(20);
+  d.getElementById('rd-del').click(); await sleep(30);
+  assert(w.eval('S.recipes.length')===34, 'recipe delete removes it');
+
+  // --- specs filters ---
+  const ginChip = [...d.querySelectorAll('#spec-filters .chip')].find(c=>c.dataset.f==='gin');
+  ginChip.click(); await sleep(20);
+  assert([...d.querySelectorAll('#spec-list .rname')].every(el=>{const n=el.textContent;return ['Negroni','Martini','Gimlet','Last Word','Tom Collins','French 75'].some(x=>n.includes(x));}), 'base-spirit chip filters to gin drinks');
+  const mkChip = [...d.querySelectorAll('#spec-filters .chip')].find(c=>c.dataset.f==='__mk');
+  mkChip.click(); await sleep(20);
+  const mkDots = [...d.querySelectorAll('#spec-list .rcard .mdot')];
+  assert(mkDots.length>0 && mkDots.every(el=>el.classList.contains('mk')||el.classList.contains('lw')), 'makeable-only shows only makeable gin drinks');
+  w.eval('specFilter="all"; makeableOnly=false;');
+
+  // --- acceptance: menu mode ---
+  w.eval('S.recipes.find(r=>r.name==="Gimlet").house = true; save();');
+  w.eval('setTab("menu")'); await sleep(20);
+  assert(d.body.classList.contains('menuMode'), 'menu mode strips admin chrome (menuMode class hides tabbar/topbar)');
+  const menuNames = [...d.querySelectorAll('#menu-body .mname')].map(e=>e.textContent);
+  assert(menuNames.length>0 && menuNames[0].includes('Gimlet') && menuNames[0].includes('★'), 'house drink pinned to the top of the menu with a ★');
+  const makeableNames = JSON.parse(w.eval('JSON.stringify(S.recipes.filter(r=>recipeStatus(r).makeable).map(r=>r.name))'));
+  assert(menuNames.length===makeableNames.length && menuNames.every(n=>makeableNames.some(m=>n.includes(m))), 'menu lists exactly the makeable recipes');
+  assert(d.querySelectorAll('#view-menu button').length===1, 'only admin control in menu mode is the exit button');
+  d.getElementById('menu-exit').click(); await sleep(20);
+  assert(!d.body.classList.contains('menuMode'), 'menu exit returns to admin');
+
+  // --- acceptance: export -> wipe -> import restores everything ---
+  const backup = w.eval('exportJSON()');
+  w.eval('localStorage.clear(); S = fresh(); renderAll();');
+  assert(w.eval('S.bottles.length')===0, 'wipe leaves an empty shelf');
+  assert(w.eval('importJSON('+JSON.stringify(backup)+')')===null, 'importJSON accepts the backup');
+  assert(w.eval('S.bottles.length')===7, 'import restores all 7 bottles');
+  assert(w.eval('S.recipes.find(r=>r.name==="Gimlet").rating')===5 && w.eval('S.recipes.find(r=>r.name==="Gimlet").house')===true, 'import restores ratings and house flags');
+  assert(w.eval('importJSON("{\\"nope\\":true}")')!==null, 'import rejects a non-backup JSON');
+  assert(w.eval('importJSON("not json at all")')!==null, 'import rejects garbage text');
+
+  // --- scan flow: mocked fetch -> confirm sheet -> selective add ---
+  w.__scanResult = { bottles: [
+    { name:'Amaro Nonino Quintessentia', category:'amaro', subtype:'nonino' },
+    { name:'Dolin Rouge', category:'vermouth', subtype:'sweet' },
+    { name:'Campari Bitter', category:'amaro', subtype:'campari' },      // duplicate of existing
+    { name:'Weird Thing (unsure)', category:'not-a-category' },          // bad category -> other
+  ]};
+  const scanned = await w.requestScan('image/jpeg','aGVsbG8=');
+  assert(Array.isArray(scanned) && scanned.length===4, 'requestScan posts to SCAN_URL and returns the bottle list');
+  w.openConfirmSheet(scanned); await sleep(30);
+  assert(d.querySelectorAll('#modal .scanrow').length===4, 'confirm sheet shows one row per detected bottle');
+  const dupRow = [...d.querySelectorAll('#modal .scanrow')].find(r=>r.querySelector('.sr-name').value==='Campari Bitter');
+  assert(dupRow.querySelector('.dup')!==null && dupRow.querySelector('.sr-ck').checked===false, 'duplicate bottle flagged and default-unchecked');
+  const weirdRow = [...d.querySelectorAll('#modal .scanrow')].find(r=>r.querySelector('.sr-name').value.includes('Weird'));
+  assert(weirdRow.querySelector('.sr-cat').value==='other', 'unknown category coerced to "other"');
+  assert(d.getElementById('sr-commit').textContent==='Add 3 bottles', 'commit button counts checked rows');
+  weirdRow.querySelector('.sr-ck').checked = false;
+  weirdRow.querySelector('.sr-ck').dispatchEvent(new w.Event('change'));
+  await sleep(20);
+  assert(d.getElementById('sr-commit').textContent==='Add 2 bottles', 'unchecking a row updates the count');
+  const before = w.eval('S.bottles.length');
+  d.getElementById('sr-commit').click(); await sleep(30);
+  assert(w.eval('S.bottles.length')===before+2, 'commit adds only the checked rows');
+  assert(w.eval('S.bottles.some(b=>b.name==="Dolin Rouge" && b.category==="vermouth" && b.subtype==="sweet")'), 'scanned sweet vermouth lands on the shelf correctly');
+  assert(w.eval('S.bottles.filter(b=>b.name==="Campari Bitter").length')===1, 'duplicate row stayed unchecked — no double bottle');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Negroni")).makeable')===true, 'scanned vermouth completes the Negroni');
+
+  // --- persistence + migration guard ---
+  await sleep(600); // let the debounced save flush
+  const persisted = w.eval('JSON.parse(localStorage.getItem("bar-v1")||"null")');
+  assert(persisted && persisted.v===1 && persisted.bottles.length===w.eval('S.bottles.length'), 'state persists to localStorage under bar-v1');
+  w.eval('localStorage.setItem("bar-v1", JSON.stringify({v:99, alien:true}))');
+  assert(w.eval('load().recipes.length')===34 && w.eval('load().bottles.length')===0, 'unknown schema version -> clean fresh state');
+  assert(w.eval('!!localStorage.getItem("bar-v1-backup")'), 'migration guard keeps a backup of the unknown blob');
+  w.eval('localStorage.setItem("bar-v1", "corrupted{{{")');
+  assert(w.eval('load().recipes.length')===34, 'corrupted storage -> clean fresh state, no crash');
+
+  assert(errors.length===0, 'no runtime errors across the whole run'+(errors.length?' -> '+errors.join(' | '):''));
+  console.log(process.exitCode ? '\nSOME TESTS FAILED' : '\nall green');
+})();
