@@ -184,6 +184,7 @@ function recipePrompt(staples) {
     'Ingredient rules: any household or pantry ingredient (citrus, syrup, spice, dairy, eggs, coffee, coconut milk, etc.) ' +
     'is kind:"staple" with a short lowercase name — use the exact string from this list when one matches: [' +
     staples.join(', ') + '], otherwise invent a sensible short name (e.g. "cinnamon", "condensed milk"). ' +
+    'Never file spices, milks, syrups, juices, or other pantry items under kind:"tag" with category "other" — they are staples. ' +
     'Everything alcoholic or bottled from a store is kind:"tag" with a category from the allowed list and, ' +
     'when meaningful, a lowercase subtype following these conventions: ' + SUBTYPE_CONVENTIONS + ' ' +
     'qty is a plain decimal string like "0.75". Keep glass and garnish short. Put technique tips in notes. ' +

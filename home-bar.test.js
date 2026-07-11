@@ -288,15 +288,17 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       { kind:'tag', category:'liqueur', subtype:'maraschino', qty:'0.75', unit:'oz' },
       { kind:'tag', category:'amaro', subtype:'aperol', qty:'0.75', unit:'oz' },
       { kind:'staple', staple:'lime', qty:'0.75', unit:'oz' },
+      { kind:'tag', category:'other', subtype:'cinnamon', qty:'1', unit:'pinch' },
       { kind:'tag', category:'not-real', qty:'1', unit:'oz' },
     ] } };
   const rec = await w.requestRecipe({ text:'a mezcal last word riff' });
   assert(rec.name==='Division Bell', 'requestRecipe posts to RECIPE_URL and returns the draft');
   w.openRecipeForm(null, w.convertAiRecipe(rec)); await sleep(30);
   assert(d.getElementById('rf-name').value==='Division Bell', 'AI draft prefills the recipe name');
-  assert(d.querySelectorAll('#rf-ings .ingrow').length===4, 'AI draft prefills valid ingredient rows and drops junk categories');
+  assert(d.querySelectorAll('#rf-ings .ingrow').length===5, 'AI draft prefills valid ingredient rows and drops junk categories');
   assert([...d.querySelectorAll('#rf-ings .ingrow')][1].querySelector('.ir-sub').value==='maraschino', 'tag subtypes land in the form');
   assert([...d.querySelectorAll('#rf-ings .ingrow')][3].querySelector('.ir-staple').value==='lime', 'staple ingredients land in the form');
+  assert([...d.querySelectorAll('#rf-ings .ingrow')][4].querySelector('.ir-staple').value==='cinnamon', 'pantry items filed under tag/other become staples');
   d.getElementById('rf-save').click(); await sleep(30);
   assert(w.eval('S.recipes.some(r=>r.name==="Division Bell")'), 'drafted recipe saves like any other');
   w.eval('deleteRecipe(S.recipes.find(r=>r.name==="Division Bell").id)');
@@ -323,6 +325,33 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('localStorage.clear(); S = fresh(); renderAll();');
   assert(w.eval('importJSON('+JSON.stringify(wlBackup)+')')===null, 'backup with wishlist imports');
   assert(w.eval('S.wishlist.length')===1 && w.eval('S.wishlist[0].img').startsWith('data:image') && w.eval('S.bottles.length')===bottleCount, 'wishlist photos survive the backup round-trip');
+
+  // --- menu descriptions: capped auto + owner override ---
+  w.upsertRecipe({ name:'Test Coquito', method:'blend', glass:'rocks', garnish:'', notes:'', rating:0, house:false,
+    ingredients:[
+      { qty:'2', unit:'oz', req:{ tag:{ category:'rum', subtype:'aged' } } },
+      { qty:'4', unit:'oz', req:{ staple:'coconut milk' } },
+      { qty:'4', unit:'oz', req:{ staple:'condensed milk' } },
+      { qty:'1', unit:'pinch', req:{ staple:'cinnamon' } },
+      { qty:'1', unit:'pinch', req:{ staple:'nutmeg' } } ] });
+  const cq = 'S.recipes.find(r=>r.name==="Test Coquito")';
+  const ad = w.eval('autoDesc('+cq+')');
+  assert(ad.startsWith('aged rum, coconut milk, condensed milk') && ad.endsWith('…') && !ad.includes('nutmeg'),
+    'auto description leads with alcohol and caps the pantry list');
+  w.eval('upsertBottle({name:"Diplomatico", category:"rum", subtype:"aged", level:"full"})');
+  w.eval(cq+'.menuDesc="Puerto Rican Christmas in a glass"; save();');
+  w.eval('setTab("menu")'); await sleep(20);
+  const cqItem = [...d.querySelectorAll('#menu-body .mitem:not(.pour)')].find(el=>el.querySelector('.mname').textContent.includes('Test Coquito'));
+  assert(cqItem && cqItem.querySelector('.mdesc').textContent==='Puerto Rican Christmas in a glass', 'menu description override is what guests see');
+  w.eval('openRecipeDetail('+cq+'.id)'); await sleep(20);
+  assert(d.getElementById('rd-mdesc').value==='Puerto Rican Christmas in a glass', 'detail sheet exposes the menu description');
+  d.getElementById('rd-mdesc').value = 'Coquito, the family way';
+  d.getElementById('rd-mdesc').dispatchEvent(new w.Event('change')); await sleep(20);
+  assert(w.eval(cq+'.menuDesc')==='Coquito, the family way', 'editing the description in the detail sheet saves');
+  w.eval('closeModal()');
+  w.eval('deleteRecipe('+cq+'.id)');
+  w.eval('deleteBottle(S.bottles.find(b=>b.name==="Diplomatico").id)');
+  w.eval('setTab("shelf")');
 
   // --- persistence + migration guard ---
   await sleep(600); // let the debounced save flush

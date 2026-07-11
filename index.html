@@ -477,9 +477,16 @@ function ingLabel(ing){
   if(ing.req.bottleId){ const b = S.bottles.find(x => x.id === ing.req.bottleId); return b ? b.name : 'a specific bottle'; }
   return tagLabel(ing.req.tag||{});
 }
+// alcohol leads, pantry follows, capped short — a menu line, not an inventory
 function autoDesc(r){
-  return r.ingredients.filter(i => !(i.note||'').includes('optional')).map(ingLabel).join(', ');
+  const ings = r.ingredients.filter(i => !(i.note||'').includes('optional'));
+  const gating = ings.filter(i => reqGates(i.req)).map(ingLabel);
+  const rest = ings.filter(i => !reqGates(i.req)).map(ingLabel);
+  const count = Math.min(5, Math.max(3, gating.length));
+  const labels = gating.concat(rest).slice(0, count);
+  return labels.join(', ') + (gating.length + rest.length > count ? '…' : '');
 }
+function menuDescFor(r){ return (r.menuDesc||'').trim() || autoDesc(r) || (r.notes||'').trim(); }
 
 /* ============================== wishlist ============================== */
 function upsertWish(wi){
@@ -660,6 +667,7 @@ function convertAiRecipe(rec){
   for(const i of (rec.ingredients || [])){
     let req = null;
     if(i.kind === 'staple' && i.staple) req = { staple: norm(i.staple) };
+    else if(norm(i.category||'') === 'other' && norm(i.subtype||'')) req = { staple: norm(i.subtype) }; // pantry stuff mislabelled as a bottle
     else if(i.category && CATEGORIES.includes(norm(i.category)))
       req = norm(i.subtype||'') ? { tag:{ category:norm(i.category), subtype:norm(i.subtype) } } : { tag:{ category:norm(i.category) } };
     if(!req) continue;
@@ -828,7 +836,7 @@ function menuPayload(){
     .sort((a,z) => POUR_CATS.indexOf(a.category) - POUR_CATS.indexOf(z.category) || a.name.localeCompare(z.name));
   return {
     t: S.menuTitle,
-    c: items.map(r => ({ n:r.name, d:autoDesc(r) || (r.notes||'').trim(), h:!!r.house })),
+    c: items.map(r => ({ n:r.name, d:menuDescFor(r), h:!!r.house })),
     s: pours.map(b => ({ n:b.name, c:b.category, t:norm(b.subtype||'') })),
   };
 }
@@ -1006,6 +1014,8 @@ function openRecipeDetail(id){
     '<div class="starpick" id="rd-stars">' + [1,2,3,4,5].map(i => '<span data-s="' + i + '" class="' + (i<=(r.rating||0)?'lit':'') + '">★</span>').join('') + '</div>' +
     '<hr class="sep">' + ingHtml +
     '<label class="fieldlbl">Notes</label><textarea id="rd-notes" rows="2">' + esc(r.notes||'') + '</textarea>' +
+    '<label class="fieldlbl">Menu description <span class="dim">(what guests see — blank = automatic)</span></label>' +
+    '<input id="rd-mdesc" value="' + esc(r.menuDesc||'') + '" placeholder="' + esc(autoDesc(r)) + '">' +
     '<div class="rowline" style="margin-top:12px"><label class="rowline" style="gap:7px"><input type="checkbox" id="rd-house" style="width:auto"' + (r.house?' checked':'') + '> House drink <span class="housestar">★</span></label></div>' +
     '<div style="display:flex;gap:8px;margin-top:16px">' +
       '<button class="abtn danger" id="rd-del">Delete</button>' +
@@ -1019,6 +1029,7 @@ function openRecipeDetail(id){
   });
   document.getElementById('rd-house').addEventListener('change', e => { r.house = e.target.checked; save(); });
   document.getElementById('rd-notes').addEventListener('change', e => { r.notes = e.target.value; save(); });
+  document.getElementById('rd-mdesc').addEventListener('change', e => { r.menuDesc = e.target.value.trim(); save(); });
   document.getElementById('rd-done').onclick = () => { closeModal(); renderAll(); };
   document.getElementById('rd-edit').onclick = () => openRecipeForm(id);
   document.getElementById('rd-del').onclick = () => { if(confirm('Delete this recipe?')){ deleteRecipe(id); closeModal(); } };
@@ -1066,6 +1077,8 @@ function openRecipeForm(id, pre){
     '<label class="fieldlbl">Ingredients</label><div id="rf-ings">' + r.ingredients.map(ingRowHtml).join('') + '</div>' +
     '<button class="abtn ghost" id="rf-adding" style="width:100%">+ ingredient</button>' +
     '<label class="fieldlbl">Notes</label><textarea id="rf-notes" rows="2">' + esc(r.notes||'') + '</textarea>' +
+    '<label class="fieldlbl">Menu description <span class="dim">(what guests see — blank = automatic)</span></label>' +
+    '<input id="rf-mdesc" value="' + esc(r.menuDesc||'') + '" placeholder="e.g. Puerto Rican Christmas in a glass">' +
     '<label class="rowline" style="gap:7px;margin-top:12px"><input type="checkbox" id="rf-house" style="width:auto"' + (r.house?' checked':'') + '> House drink <span class="housestar">★</span></label>' +
     '<button class="abtn" id="rf-save" style="width:100%;margin-top:16px">Save recipe</button>');
   const ings = document.getElementById('rf-ings');
@@ -1115,6 +1128,7 @@ function openRecipeForm(id, pre){
     const ok = upsertRecipe({ id: id || undefined, name: document.getElementById('rf-name').value,
       method: document.getElementById('rf-method').value, glass: document.getElementById('rf-glass').value.trim(),
       garnish: document.getElementById('rf-garnish').value.trim(), notes: document.getElementById('rf-notes').value,
+      menuDesc: document.getElementById('rf-mdesc').value.trim(),
       rating: r.rating||0, house: document.getElementById('rf-house').checked, ingredients });
     if(!ok){ toast('A recipe needs a name and at least one ingredient.'); return; }
     closeModal();
