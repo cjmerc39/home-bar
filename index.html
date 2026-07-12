@@ -192,6 +192,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
   </section>
 
   <section id="view-specs" class="view">
+    <input id="spec-search" type="search" placeholder="Search drinks or ingredients &mdash; try &quot;campari&quot;&hellip;" style="margin:4px 0 12px">
     <div id="spec-filters"></div>
     <div id="spec-list"></div>
     <button class="abtn ghost" id="btn-addrecipe" style="width:100%;margin-top:6px">+ New recipe</button>
@@ -865,6 +866,7 @@ let tab = 'shelf';
 let specFilter = 'all';
 let makeableOnly = false;
 let shelfQuery = '';
+let specQuery = '';
 
 function setTab(t){
   tab = t;
@@ -937,9 +939,12 @@ function renderSpecs(){
   }));
   const list = document.getElementById('spec-list');
   const html = [];
+  const q = norm(specQuery);
   const rs = S.recipes.slice().sort((a,z)=>a.name.localeCompare(z.name));
   for(const r of rs){
     if(specFilter !== 'all' && recipeBase(r) !== specFilter) continue;
+    // match the drink's name OR any ingredient — "campari" finds the Negroni
+    if(q && !norm(r.name).includes(q) && !r.ingredients.some(ing => norm(ingLabel(ing)).includes(q))) continue;
     const st = recipeStatus(r);
     if(makeableOnly && !st.makeable) continue;
     html.push('<div class="card rcard" data-id="', r.id, '">',
@@ -1563,6 +1568,7 @@ document.getElementById('import-file').addEventListener('change', e => {
   fr.readAsText(f);
 });
 document.getElementById('shelf-search').addEventListener('input', e => { shelfQuery = e.target.value; renderShelf(); });
+document.getElementById('spec-search').addEventListener('input', e => { specQuery = e.target.value; renderSpecs(); });
 document.getElementById('menu-exit').addEventListener('click', () => setTab('shelf'));
 document.querySelectorAll('#tabbar button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 document.getElementById('modalwrap').addEventListener('click', e => { if(e.target.id === 'modalwrap') closeModal(); });

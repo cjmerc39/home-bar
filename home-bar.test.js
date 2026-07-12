@@ -182,6 +182,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('rd-del').click(); await sleep(30);
   assert(w.eval('S.recipes.length')===34, 'recipe delete removes it');
 
+  // --- specs search: by name and by ingredient (reverse lookup) ---
+  d.getElementById('spec-search').value = 'campari';
+  d.getElementById('spec-search').dispatchEvent(new w.Event('input')); await sleep(20);
+  const found = [...d.querySelectorAll('#spec-list .rname')].map(e=>e.textContent);
+  assert(found.length===3 && ['Negroni','Boulevardier','Jungle Bird'].every(n=>found.some(f=>f.includes(n))),
+    'searching an ingredient finds every drink that uses it');
+  d.getElementById('spec-search').value = 'daiq';
+  d.getElementById('spec-search').dispatchEvent(new w.Event('input')); await sleep(20);
+  assert([...d.querySelectorAll('#spec-list .rname')].length===2, 'name search still works (both Daiquiris)');
+  d.getElementById('spec-search').value = '';
+  d.getElementById('spec-search').dispatchEvent(new w.Event('input')); await sleep(20);
+
   // --- specs filters ---
   const ginChip = [...d.querySelectorAll('#spec-filters .chip')].find(c=>c.dataset.f==='gin');
   ginChip.click(); await sleep(20);
