@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,9 +27,14 @@
 /* html painted walnut so iOS standalone letterboxing never shows black bands */
 html{height:100%;background:var(--bg)}
 /* app-shell layout: header + scrolling main + tab bar as flex rows; only
-   <main> scrolls. body is pinned to the real screen edges (position:fixed)
-   because iOS standalone under-reports 100%/100dvh heights at launch. */
-body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden}
+   <main> scrolls. Installed (standalone) iOS sizes the page as if Safari's
+   toolbar were present, leaving a phantom gap — 100lvh ignores it. Safari
+   itself keeps dvh, which tracks the real toolbar correctly. */
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);height:100%;display:flex;flex-direction:column;overflow:hidden}
+@supports (height:100dvh){body{height:100dvh}}
+@media (display-mode: standalone){
+  @supports (height:100lvh){body{height:100lvh}}
+}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   background:radial-gradient(120% 90% at 50% 0%, rgba(255,220,160,.045), transparent 55%),
              radial-gradient(140% 120% at 50% 110%, rgba(0,0,0,.5), transparent 60%)}
