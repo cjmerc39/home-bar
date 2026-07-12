@@ -62,6 +62,16 @@ const jbody = (o) => ({ method: 'POST', headers: { 'content-type': 'application/
   let j = await r.json();
   assert(r.status === 200 && j.bottles.length === 1 && j.bottles[0].name === 'Campari', 'scan happy path parses the model output');
   assert(anthropicCalls[0].body.model === 'claude-opus-4-8' && anthropicCalls[0].body.messages[0].content[0].type === 'image', 'scan sends the image to the model');
+  const itemProps = anthropicCalls[0].body.output_config.format.schema.properties.bottles.items;
+  assert(!!itemProps.properties.box && !itemProps.required.includes('box'), 'scan schema offers box but never requires it');
+  anthropicReply = textReply({ bottles: [
+    { name: 'Boxed Gin', category: 'gin', box: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 } },
+    { name: 'Plain Rum', category: 'rum' },
+  ] });
+  r = await call('/scan', jbody({ media_type: 'image/jpeg', data: 'aGVsbG8=' }));
+  j = await r.json();
+  assert(r.status === 200 && j.bottles[0].box && j.bottles[0].box.w === 0.3, 'a scan response with a box passes through intact');
+  assert(j.bottles[1].box === undefined, 'a scan response without a box also validates');
 
   // --- /recipe validation + paths ---
   r = await call('/recipe', jbody({}));

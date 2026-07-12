@@ -70,6 +70,9 @@ const SCAN_PROMPT = [
   'Skip glassware, decor, and anything that is not a bottle of something drinkable.',
   'If a label is only partly readable, still include the bottle with your best-guess',
   'name and append " (unsure)" to the name.',
+  'When you can, also give each bottle a box: its bounding box in the image as',
+  '{x, y, w, h}, each a number from 0 to 1 normalized to the image width/height,',
+  'drawn tight around that one bottle. Omit box when you are not sure where it is.',
 ].join(' ');
 
 const SCAN_SCHEMA = {
@@ -83,6 +86,17 @@ const SCAN_SCHEMA = {
           name: { type: 'string' },
           category: { type: 'string', enum: CATEGORIES },
           subtype: { type: 'string' },
+          box: { // optional: normalized 0..1 bounding box, tight around the bottle
+            type: 'object',
+            properties: {
+              x: { type: 'number', minimum: 0, maximum: 1 },
+              y: { type: 'number', minimum: 0, maximum: 1 },
+              w: { type: 'number', minimum: 0, maximum: 1 },
+              h: { type: 'number', minimum: 0, maximum: 1 },
+            },
+            required: ['x', 'y', 'w', 'h'],
+            additionalProperties: false,
+          },
         },
         required: ['name', 'category'],
         additionalProperties: false,

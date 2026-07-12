@@ -173,6 +173,56 @@ body.menuMode #tabbar,body.menuMode #topbar{display:none}
 .ing-line.miss .lbl{color:var(--bad)}
 .detmeta{color:var(--mut);font-size:13px;margin:6px 0 2px}
 hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
+/* shelf & specs view toggles */
+.vtog{display:flex;align-items:center;justify-content:center;padding:9px 10px!important}
+#spec-tools{display:flex;gap:8px;margin:4px 0 12px}
+#spec-tools input{flex:1}
+/* bar view (shelf as a back bar) */
+svg.barshelf{display:block;width:100%;overflow:visible}
+.bar-bottle{cursor:pointer}
+.bar-outline{fill:rgba(241,230,208,.05);stroke:var(--brass);stroke-width:1.5;stroke-linejoin:round}
+.bar-liquid{transition:y .55s cubic-bezier(.4,0,.2,1),height .55s cubic-bezier(.4,0,.2,1),fill .55s}
+.bar-liquid.full{fill:rgba(201,161,90,.82)}
+.bar-liquid.low{fill:rgba(217,131,46,.88)}
+.bar-liquid.out{fill:rgba(107,91,72,0)}
+.bar-bottle.out .bar-outline{stroke:var(--out);fill:rgba(107,91,72,.05)}
+.bar-name{font-size:9px;fill:var(--mut)}
+.bar-bottle.out .bar-name{fill:var(--out);text-decoration:line-through}
+.bar-edit text{font-size:10px;fill:var(--brassdim)}
+.bar-edit circle{pointer-events:all}
+.lblband rect{fill:var(--brassdim);opacity:.9}
+.lblband text{font-size:5.5px;fill:#241a0c;font-weight:600}
+.bar-thumb{opacity:.92}
+.shelfline{stroke:var(--brassdim);stroke-width:1.2;opacity:.75}
+/* scan confirm thumbnails */
+.scanthumb{width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:none}
+span.scanthumb{display:block;background:var(--bg2)}
+/* flavor galaxy */
+#galaxy{display:block;width:100%}
+#galaxy .star{cursor:pointer}
+#galaxy .tap{fill:transparent;pointer-events:all}
+#galaxy .core,#galaxy .glow{fill:var(--brass)}
+#galaxy .glow{opacity:.22}
+#galaxy .core-star{fill:var(--brass);font-size:13px}
+#galaxy .star.lw .core,#galaxy .star.lw .glow,#galaxy .star.lw .core-star{fill:var(--low)}
+#galaxy .star.dim .core{fill:#4d3e2b}
+#galaxy .star.dim .core-star{fill:#5a4933}
+#galaxy .slabel{font-family:var(--serif);font-size:10.5px;fill:var(--mut)}
+#galaxy .star.lw .slabel{fill:var(--low)}
+#galaxy .star.faded{opacity:.16}
+.gx-axis{font-size:9px;letter-spacing:2.4px;text-transform:uppercase;fill:var(--dim)}
+/* liquid intelligence */
+#li-toggle{display:flex;align-items:center;width:100%;padding:4px 0;color:var(--brass2)}
+#li-toggle .t{font-family:var(--serif);font-size:16.5px;flex:1;text-align:left}
+#li-chart{display:block;width:100%;touch-action:pan-y}
+.li-temp{fill:none;stroke:var(--brass);stroke-width:2}
+.li-dil{fill:none;stroke:var(--ink);stroke-width:1.3;opacity:.85}
+.li-ghost{fill:none;stroke:var(--dim);stroke-width:1.2;stroke-dasharray:4 3;opacity:.7}
+.li-ax{font-size:8.5px;fill:var(--dim)}
+.li-lbl{font-size:8.5px;letter-spacing:.6px}
+.li-target{stroke:var(--brassdim);stroke-dasharray:2 3}
+#li-cursor{stroke:var(--brass2);stroke-width:1}
+#li-verdict{font-family:var(--serif);color:var(--brass2);font-size:15.5px;margin:9px 0 3px}
 </style>
 </head>
 <body>
@@ -184,6 +234,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
   <section id="view-shelf" class="view">
     <div id="shelf-tools">
       <input id="shelf-search" type="search" placeholder="Search the shelf&hellip;">
+      <button class="abtn ghost vtog" id="btn-shelfview" title="Bar view"></button>
       <button class="abtn ghost" id="btn-scan">&#128247; Scan</button>
       <button class="abtn" id="btn-addbottle">+ Add</button>
     </div>
@@ -203,7 +254,10 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
   </section>
 
   <section id="view-specs" class="view">
-    <input id="spec-search" type="search" placeholder="Search drinks or ingredients &mdash; try &quot;campari&quot;&hellip;" style="margin:4px 0 12px">
+    <div id="spec-tools">
+      <input id="spec-search" type="search" placeholder="Search drinks or ingredients &mdash; try &quot;campari&quot;&hellip;">
+      <button class="abtn ghost vtog" id="btn-specsview" title="Flavor galaxy"></button>
+    </div>
     <div id="spec-filters"></div>
     <div id="spec-list"></div>
     <button class="abtn ghost" id="btn-addrecipe" style="width:100%;margin-top:6px">+ New recipe</button>
@@ -327,9 +381,29 @@ const TAG_LABELS = {
 function T(category, subtype){ return subtype ? {tag:{category, subtype}} : {tag:{category}}; }
 function ST(name){ return {staple:name}; }
 function ING(qty, unit, req, note){ const i={qty,unit,req}; if(note) i.note=note; return i; }
+// hand-tuned flavor-galaxy coordinates for the classics: x 0=bitter…1=bright, y 0=boozy…1=refreshing.
+// Curation, not math: the sours cluster bright/mid, the Negroni family holds the
+// bitter-boozy corner, tiki forms its own nebula with Jungle Bird pulled bitterward.
+const SEED_FLAVORS = {
+  r01:[.43,.20], r02:[.38,.25], r03:[.67,.55], r04:[.69,.47], r05:[.62,.45],
+  r06:[.58,.55], r07:[.16,.16], r08:[.33,.09], r09:[.60,.92], r10:[.71,.57],
+  r11:[.75,.60], r12:[.70,.80], r13:[.68,.93], r14:[.37,.14], r15:[.77,.54],
+  r16:[.78,.82], r17:[.80,.70], r18:[.66,.84], r19:[.52,.66], r20:[.84,.74],
+  r21:[.68,.61], r22:[.48,.40], r23:[.12,.20], r24:[.50,.05], r25:[.73,.51],
+  r26:[.56,.50], r27:[.74,.78], r28:[.78,.74], r29:[.45,.88], r30:[.63,.51],
+  r31:[.30,.30], r32:[.50,.52], r33:[.22,.14], r34:[.48,.16]
+};
+// pre-1.2 saves and backups seeded these recipes without coordinates — give an
+// UNPLACED classic its baked spot (an edited or moved one is never touched)
+function backfillFlavors(recipes){
+  for(const r of recipes || []){
+    const f = SEED_FLAVORS[r.id];
+    if(f && !r.flavor) r.flavor = { x:f[0], y:f[1] };
+  }
+}
 function seedRecipes(){
   const R = (id,name,method,glass,garnish,notes,ings)=>({id,name,method,glass,garnish,notes,rating:0,house:false,ingredients:ings});
-  return [
+  const list = [
     R('r01','Old Fashioned','stir','rocks','orange twist','',[
       ING('2','oz',T('whiskey','bourbon')), ING('1','tsp',ST('sugar')), ING('2','dash',T('bitters','aromatic'))]),
     R('r02','Manhattan','stir','coupe','brandied cherry','',[
@@ -399,11 +473,13 @@ function seedRecipes(){
     R('r34','Rum Old Fashioned','stir','rocks','orange + lime twist','Demerara syrup preferred.',[
       ING('2','oz',T('rum','aged')), ING('1','tsp',ST('sugar')), ING('2','dash',T('bitters','aromatic'))])
   ];
+  for(const r of list){ const f = SEED_FLAVORS[r.id]; if(f) r.flavor = { x:f[0], y:f[1] }; }
+  return list;
 }
 
 /* ============================== state ============================== */
 let S = null;
-function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[], menuId:null, menuOwner:null, savedAt:0 }; }
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[], menuId:null, menuOwner:null, savedAt:0, shelfView:'list', specsView:'list', nerdMode:false }; }
 function load(){
   let raw = null;
   try{ raw = localStorage.getItem(KEY); }catch(e){}
@@ -430,6 +506,10 @@ function load(){
   if(typeof d.menuId !== 'string') d.menuId = null;
   if(typeof d.menuOwner !== 'string') d.menuOwner = null;
   if(typeof d.savedAt !== 'number') d.savedAt = 0;
+  if(d.shelfView !== 'bar') d.shelfView = 'list';
+  if(d.specsView !== 'sky') d.specsView = 'list';
+  d.nerdMode = d.nerdMode === true;
+  backfillFlavors(d.recipes);
   return d;
 }
 let _saveT = null, storageFull = false;
@@ -584,6 +664,147 @@ function autoDesc(r){
 }
 function menuDescFor(r){ return (r.menuDesc||'').trim() || autoDesc(r) || (r.notes||'').trim(); }
 
+/* ============================== bar view silhouettes ============================== */
+// Closed outlines hand-tuned in a 44×88 box (bottom = 88). The cap/lid is a second
+// subpath so ONE path string serves as both the visible outline and the liquid's
+// clip. `top` marks the top of the glass (liquid fills a fraction of 88−top);
+// `label` is where a scanned label crop, or the brass name band, sits.
+const SHAPES = {
+  whiskey:{ top:10, label:{x:9, y:36, w:26, h:28}, path:'M13 6 H31 V10 H13 Z M14 10 H30 V22 L38 26 V84 Q38 88 34 88 H10 Q6 88 6 84 V26 L14 22 Z' },
+  agave:  { top:8,  label:{x:11, y:38, w:22, h:26}, path:'M15 4 H29 V8 H15 Z M16 8 H28 V22 L36 26 V84 Q36 88 32 88 H12 Q8 88 8 84 V26 L16 22 Z' },
+  round:  { top:6,  label:{x:10, y:40, w:24, h:26}, path:'M16 2 H28 V6 H16 Z M17 6 H27 V18 C27 24 37 26 37 34 V84 Q37 88 33 88 H11 Q7 88 7 84 V34 C7 26 17 24 17 18 Z' },
+  tall:   { top:4,  label:{x:13, y:34, w:18, h:30}, path:'M16 0 H28 V4 H16 Z M17 4 H27 V14 L33 18 V84 Q33 88 29 88 H15 Q11 88 11 84 V18 L17 14 Z' },
+  slope:  { top:6,  label:{x:12, y:42, w:20, h:24}, path:'M16 2 H28 V6 H16 Z M17 6 H27 V16 L34 32 V84 Q34 88 30 88 H14 Q10 88 10 84 V32 L17 16 Z' },
+  wine:   { top:3,  label:{x:12, y:46, w:20, h:24}, path:'M17 0 H27 V3 H17 Z M18 3 H26 V20 C26 28 34 30 34 38 V84 Q34 88 30 88 H14 Q10 88 10 84 V38 C10 30 18 28 18 20 Z' },
+  bitters:{ top:48, label:{x:13, y:62, w:18, h:16}, path:'M13 38 H31 V48 H13 Z M15 48 H29 V54 L33 58 V84 Q33 88 29 88 H15 Q11 88 11 84 V58 L15 54 Z' },
+  mixer:  { top:40, label:{x:10, y:58, w:24, h:18}, path:'M12 30 H32 V40 H12 Z M14 40 H30 V46 L38 52 V84 Q38 88 34 88 H10 Q6 88 6 84 V52 L14 46 Z' },
+  jar:    { top:52, label:{x:12, y:60, w:20, h:18}, path:'M12 46 H32 V52 H12 Z M14 52 H30 Q34 52 34 56 V84 Q34 88 30 88 H14 Q10 88 10 84 V56 Q10 52 14 52 Z' },
+};
+const BOTTLE_SHAPES = { tequila:'agave', mezcal:'agave', whiskey:'whiskey', rum:'round', brandy:'round',
+  gin:'tall', vodka:'tall', amaro:'slope', liqueur:'slope', vermouth:'wine', wine:'wine',
+  bitters:'bitters', mixer:'mixer', spice:'jar', milk:'jar', other:'jar' };
+function shapeFor(cat){ return SHAPES[BOTTLE_SHAPES[cat]] || SHAPES.jar; }
+function liquidRect(cat, level){
+  const sh = shapeFor(cat);
+  const frac = level==='full' ? .85 : level==='low' ? .22 : 0;
+  const h = Math.round((88 - sh.top) * frac * 10) / 10;
+  return { y: Math.round((88 - h) * 10) / 10, h };
+}
+const ICON_LIST = '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2.5 3.5h11M2.5 8h11M2.5 12.5h11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/></svg>';
+const ICON_BAR = '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M6.2 1.5h3.6v2.6l1.7 1.9v7a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5v-7l1.7-1.9z" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
+const ICON_SKY = '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.8l1.5 4 4 1.5-4 1.5-1.5 4-1.5-4-4-1.5 4-1.5z" fill="currentColor"/><circle cx="13.2" cy="2.8" r="1" fill="currentColor"/></svg>';
+
+/* ============================== flavor galaxy ============================== */
+// A recipe without baked `flavor` coordinates gets a deterministic heuristic
+// placement: citrus pushes bright, bubbles and non-alcohol volume push
+// refreshing, the amaro/bitters share pushes bitter, an all-spirit stir sinks
+// boozy, and cream/egg/coconut pull everything back toward the center.
+const SODA_SUBTYPES = ['soda water','tonic','ginger beer','cola','grapefruit soda'];
+function flavorOf(r){
+  let total=0, alc=0, bitter=0, soda=0, citrus=0, soft=0;
+  for(const ing of (r && r.ingredients) || []){
+    const v = ingVolOz(ing); if(v <= 0) continue;
+    total += v;
+    const req = ing.req || {};
+    let cat=null, sub='';
+    if(req.tag){ cat = norm(req.tag.category); sub = norm(req.tag.subtype||''); }
+    else if(req.bottleId){ const b = S.bottles.find(x => x.id === req.bottleId); if(b){ cat = norm(b.category); sub = norm(b.subtype||''); } }
+    const st = req.staple ? norm(req.staple) : '';
+    if(GATING_CATS.includes(cat)) alc += v;
+    if(cat === 'amaro' || cat === 'bitters') bitter += v;
+    if((cat === 'mixer' && SODA_SUBTYPES.includes(sub)) || (cat === 'wine' && sub === 'sparkling')) soda += v;
+    if(st === 'lime' || st === 'lemon' || (cat === 'mixer' && sub === 'grapefruit juice')) citrus += v;
+    if(st.includes('cream') || st.includes('egg') || st.includes('coconut') || cat === 'milk') soft += v;
+  }
+  if(total <= 0) return { x:.5, y:.5 };
+  const af = alc / total;
+  let x = .5 + (citrus/total)*1.2 - (bitter/total)*1.5;
+  let y = .5 + (soda/total)*1.2 + (1-af)*.3 - af*.45;
+  if(r.method === 'stir' && soda === 0) y -= .08;
+  const pull = Math.min(.6, (soft/total)*1.2);
+  x = .5 + (x-.5)*(1-pull); y = .5 + (y-.5)*(1-pull);
+  return { x: Math.min(.96, Math.max(.04, x)), y: Math.min(.96, Math.max(.04, y)) };
+}
+function flavorPos(r){
+  const f = r && r.flavor;
+  if(f && typeof f.x === 'number' && typeof f.y === 'number' && isFinite(f.x) && isFinite(f.y))
+    return { x: Math.min(.96, Math.max(.04, f.x)), y: Math.min(.96, Math.max(.04, f.y)) };
+  return flavorOf(r);
+}
+function starJitter(id){ // deterministic — overlapping stars separate the same way every render
+  let h = 0; const s = String(id||'');
+  for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0;
+  return { dx: ((h % 97)/96 - .5) * 9, dy: (((h >>> 8) % 89)/88 - .5) * 9 };
+}
+function starXY(r){ // final field position, in the 400×400 viewBox
+  const p = flavorPos(r), j = starJitter(r.id), pad = 26, F = 400;
+  return { x: Math.round((pad + p.x*(F-2*pad) + j.dx)*10)/10,
+           y: Math.round((pad + (1-p.y)*(F-2*pad) + j.dy)*10)/10 };
+}
+
+/* ============================== liquid intelligence ============================== */
+// The physics of chilling and dilution (constants after Dave Arnold's Liquid
+// Intelligence). Essentially ALL chilling comes from melting ice, so temperature
+// and dilution are two views of one energy balance:
+//   m_w(T) = m_d · c_d · (T0 − T) / (L_f + c_w · T)
+const LI_T0 = 20;            // drink starts at room temperature, °C (ice at 0°C)
+const LI_C_DRINK = 3.8;      // specific heat of a water-ethanol mix, J/g·K
+const LI_C_WATER = 4.18;     // specific heat of the melt water, J/g·K
+const LI_L_FUSION = 334;     // enthalpy of fusion of ice, J/g — dominates the balance
+const LI_ETHANOL_D = 0.789;  // ethanol density, g/ml
+const OZ_ML = 29.5735;
+// shake: violent contact with small ice — equilibrates in seconds, lands colder.
+// stir: gentle contact — keeps improving past a minute, asymptotically, warmer floor.
+const LI_METHODS = {
+  shake: { Teq:-7, tau:4 },   // a hard shake is basically done by 12–15 seconds
+  stir:  { Teq:-4, tau:25 },
+};
+const LI_ABV = { tequila:.40, mezcal:.40, whiskey:.40, rum:.40, gin:.40, vodka:.40, brandy:.40,
+  amaro:.25, liqueur:.25, vermouth:.16, wine:.12, bitters:.45 };
+const LI_UNIT_OZ = { oz:1, ml:1/OZ_ML, cup:8, gallon:128, tsp:1/6, bsp:1/8, dash:0.03 };
+function ingAbv(req){
+  if(!req || req.staple) return 0;
+  let cat=null, sub='';
+  if(req.tag){ cat = norm(req.tag.category); sub = norm(req.tag.subtype||''); }
+  else if(req.bottleId){ const b = S.bottles.find(x => x.id === req.bottleId); if(b){ cat = norm(b.category); sub = norm(b.subtype||''); } }
+  if(!cat) return 0;
+  if(cat === 'rum' && sub === 'overproof') return .60;
+  return LI_ABV[cat] || 0;
+}
+function ingVolOz(ing){
+  const n = parseFloat(ing && ing.qty);
+  if(!isFinite(n) || n <= 0) return 0;
+  return n * (LI_UNIT_OZ[ing.unit] || 0); // drop/leaf/wedge/pinch/rinse/whole/top: zero volume
+}
+function drinkStats(r){
+  let volOz = 0, alcOz = 0;
+  for(const ing of (r && r.ingredients) || []){
+    const v = ingVolOz(ing); if(v <= 0) continue;
+    volOz += v; alcOz += v * ingAbv(ing.req);
+  }
+  if(volOz <= 0) return null;
+  const volMl = volOz * OZ_ML, alcMl = alcOz * OZ_ML;
+  const massG = (volMl - alcMl) + alcMl * LI_ETHANOL_D; // syrups & juices count as water
+  return { volOz, volMl, alcOz, abv: alcOz/volOz, massG };
+}
+function meltMassAt(massG, T){ return massG * LI_C_DRINK * (LI_T0 - T) / (LI_L_FUSION + LI_C_WATER * T); }
+function chillCurve(r, method, seconds){
+  const st = drinkStats(r), M = LI_METHODS[method];
+  if(!st || !M) return null;
+  const out = [];
+  for(let t = 0; t <= seconds; t++){
+    const temp = M.Teq + (LI_T0 - M.Teq) * Math.exp(-t / M.tau);
+    const mw = meltMassAt(st.massG, temp);
+    out.push({ t, temp, dilutionPct: mw/st.massG*100, abv: st.alcOz/(st.volOz + mw/OZ_ML) });
+  }
+  return out;
+}
+function liServe(method){ // seconds until within 0.5°C of the method's equilibrium
+  const M = LI_METHODS[method];
+  return Math.ceil(M.tau * Math.log((LI_T0 - M.Teq) / 0.5));
+}
+function fmtTemp(t){ const v = Math.round(t*2)/2; return (v < 0 ? '−' : '') + Math.abs(v) + '°C'; }
+
 /* ============================== wishlist ============================== */
 function upsertWish(wi){
   if(!wi.id) wi.id = uid('w');
@@ -655,6 +876,10 @@ function importJSON(text){
   if(typeof d.menuId !== 'string') d.menuId = null;
   if(typeof d.menuOwner !== 'string') d.menuOwner = null;
   if(typeof d.savedAt !== 'number') d.savedAt = 0;
+  if(d.shelfView !== 'bar') d.shelfView = 'list';
+  if(d.specsView !== 'sky') d.specsView = 'list';
+  d.nerdMode = d.nerdMode === true;
+  backfillFlavors(d.recipes);
   S = d; save(); renderAll(); return null;
 }
 function downloadBackup(){
@@ -814,22 +1039,54 @@ async function handleScanFile(file){
     const payload = await fileToScanPayload(file);
     const bottles = await requestScan(payload.media_type, payload.data);
     if(!bottles.length){ closeModal(); toast('No bottles spotted — try a closer, brighter photo.'); return; }
-    openConfirmSheet(bottles);
+    openConfirmSheet(bottles, payload.dataUrl);
   }catch(e){
     closeModal(); toast('Scan failed — check your connection and try again.');
   }
 }
-function openConfirmSheet(bottles){
+// the AI's boxes are best-effort (clipped necks, a neighbor's shoulder) — the
+// confirm sheet is where a bad crop gets unticked, so validate loosely here
+function validBox(b){
+  return !!b && ['x','y','w','h'].every(k => typeof b[k] === 'number' && isFinite(b[k]))
+    && b.x >= 0 && b.y >= 0 && b.w > 0 && b.h > 0 && b.x + b.w <= 1.001 && b.y + b.h <= 1.001;
+}
+function cropThumb(dataUrl, box){ // -> ~64px JPEG dataUrl, or null wherever canvas/Image can't
+  return new Promise(resolve => {
+    try{
+      const img = new Image();
+      const to = setTimeout(() => resolve(null), 4000);
+      img.onload = () => {
+        clearTimeout(to);
+        try{
+          const sx = box.x*img.width, sy = box.y*img.height;
+          const sw = Math.max(1, box.w*img.width), sh = Math.max(1, box.h*img.height);
+          const scale = 64 / Math.max(sw, sh);
+          const cv = document.createElement('canvas');
+          cv.width = Math.max(1, Math.round(sw*scale)); cv.height = Math.max(1, Math.round(sh*scale));
+          const cx = cv.getContext && cv.getContext('2d');
+          if(!cx) return resolve(null);
+          cx.drawImage(img, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+          resolve(cv.toDataURL('image/jpeg', 0.7));
+        }catch(e){ resolve(null); }
+      };
+      img.onerror = () => { clearTimeout(to); resolve(null); };
+      img.src = dataUrl;
+    }catch(e){ resolve(null); }
+  });
+}
+function openConfirmSheet(bottles, photoUrl){
   const rows = bottles.map((b, i) => {
     const cat = CATEGORIES.includes(norm(b.category)) ? norm(b.category) : 'other';
     const dup = S.bottles.some(x => norm(x.name) === norm(b.name));
-    return { name: b.name || 'Mystery bottle', category: cat, subtype: norm(b.subtype||''), level: LEVELS.includes(b.level) ? b.level : 'full', dup, checked: !dup, i };
+    return { name: b.name || 'Mystery bottle', category: cat, subtype: norm(b.subtype||''), level: LEVELS.includes(b.level) ? b.level : 'full',
+      dup, checked: !dup, box: validBox(b.box) ? b.box : null, thumb: null, i };
   });
   const html = ['<button class="mclose" onclick="closeModal()">&times;</button><h2>Found on the shelf</h2>',
     '<div class="small mut" style="margin-bottom:10px">Untick anything it got wrong, or fix the details before adding.</div>'];
   for(const r of rows){
     html.push('<div class="scanrow" data-i="', r.i, '">',
       '<input type="checkbox" class="sr-ck"', r.checked ? ' checked' : '', '>',
+      photoUrl && r.box ? '<span class="scanthumb ph" data-th="' + r.i + '"></span>' : '',
       '<div class="grow">',
         '<input class="sr-name" value="', esc(r.name), '" style="margin-bottom:5px">',
         '<div class="formrow">', catSelect('sr-cat', r.category), subInput('sr-sub', r.category, r.subtype), lvlSelect('sr-lvl', r.level), '</div>',
@@ -839,6 +1096,15 @@ function openConfirmSheet(bottles){
   html.push('<button class="abtn" id="sr-commit" style="width:100%;margin-top:8px"></button>');
   openModal(html.join(''));
   const wrap = document.getElementById('modal');
+  if(photoUrl) for(const r of rows){
+    if(!r.box) continue;
+    cropThumb(photoUrl, r.box).then(t => {
+      if(!t) return;
+      r.thumb = t;
+      const ph = wrap.querySelector('[data-th="' + r.i + '"]');
+      if(ph) ph.outerHTML = '<img class="scanthumb" data-th="' + r.i + '" src="' + esc(t) + '">';
+    });
+  }
   const update = () => {
     const n = wrap.querySelectorAll('.sr-ck:checked').length;
     const btn = document.getElementById('sr-commit');
@@ -848,19 +1114,29 @@ function openConfirmSheet(bottles){
   wrap.querySelectorAll('.sr-ck').forEach(ck => ck.addEventListener('change', update));
   update();
   document.getElementById('sr-commit').onclick = () => {
-    let added = 0;
+    let added = 0; const withThumbs = [];
     wrap.querySelectorAll('.scanrow').forEach(row => {
       if(!row.querySelector('.sr-ck').checked) return;
+      const src = rows.find(x => x.i === +row.dataset.i);
       const id = upsertBottle({
         name: row.querySelector('.sr-name').value,
         category: row.querySelector('.sr-cat').value,
         subtype: row.querySelector('.sr-sub').value,
-        level: row.querySelector('.sr-lvl').value
+        level: row.querySelector('.sr-lvl').value,
+        thumb: src && src.thumb || undefined
       });
-      if(id) added++;
+      if(id){ added++; if(src && src.thumb) withThumbs.push(id); }
     });
+    // thumbs are the quota risk: persist synchronously, or drop them visibly
+    let lostThumbs = false;
+    if(withThumbs.length && !saveNow()){
+      for(const tid of withThumbs){ const b = S.bottles.find(x => x.id === tid); if(b) delete b.thumb; }
+      saveNow(); renderAll();
+      lostThumbs = true;
+    }
     closeModal();
-    toast(added ? ('Added ' + added + ' bottle' + (added===1?'':'s') + ' to the shelf.') : 'Nothing added.');
+    toast(added ? ('Added ' + added + ' bottle' + (added===1?'':'s') +
+      (lostThumbs ? ' — the label photos didn’t fit in storage.' : ' to the shelf.')) : 'Nothing added.');
   };
 }
 
@@ -1048,11 +1324,15 @@ function renderShelf(){
   const empty = document.getElementById('empty-shelf');
   document.getElementById('btn-scan').classList.toggle('hidden', !scanEnabled());
   document.getElementById('btn-scan-empty').classList.toggle('hidden', !scanEnabled());
+  const vt = document.getElementById('btn-shelfview');
+  vt.innerHTML = S.shelfView === 'bar' ? ICON_LIST : ICON_BAR; // shows the view you'd switch TO
+  vt.title = S.shelfView === 'bar' ? 'List view' : 'Bar view';
   const q = norm(shelfQuery);
   const bottles = S.bottles.filter(b => !q || norm(b.name).includes(q) || norm(b.subtype).includes(q));
   empty.classList.toggle('hidden', S.bottles.length > 0);
   document.getElementById('shelf-tools').classList.toggle('hidden', S.bottles.length === 0);
   if(!bottles.length){ list.innerHTML = S.bottles.length ? '<div class="dim" style="padding:20px 4px">Nothing matches.</div>' : ''; return; }
+  if(S.shelfView === 'bar'){ renderShelfBar(list, bottles); return; }
   const byCat = {};
   for(const b of bottles) (byCat[b.category] = byCat[b.category] || []).push(b);
   const searching = !!q; // an active search always shows its hits, even in collapsed groups
@@ -1086,6 +1366,72 @@ function toggleCat(cat){
   if(i >= 0) S.collapsedCats.splice(i, 1); else S.collapsedCats.push(cat);
   save(); renderShelf();
 }
+/* the shelf as an actual back bar: walnut shelves, silhouettes, liquid = level.
+   collapsedCats is a list-view concept; the bar shows everything that matches. */
+function bottleSvg(b, x, top){
+  const sh = shapeFor(b.category);
+  const lr = liquidRect(b.category, b.level);
+  const name = b.name.length > 11 ? b.name.slice(0, 10) + '…' : b.name;
+  const h = ['<g class="bar-bottle', b.level === 'out' ? ' out' : '', '" data-id="', b.id, '" data-level="', b.level,
+    '" data-cat="', esc(b.category), '" transform="translate(', x, ' ', top, ')">',
+    '<clipPath id="clip-', b.id, '"><path d="', sh.path, '"/></clipPath>',
+    '<rect class="bar-liquid ', b.level, '" x="0" width="44" y="', lr.y, '" height="', lr.h, '" clip-path="url(#clip-', b.id, ')"/>'];
+  if(b.thumb){
+    h.push('<clipPath id="lbl-', b.id, '"><rect x="', sh.label.x, '" y="', sh.label.y, '" width="', sh.label.w, '" height="', sh.label.h, '" rx="2"/></clipPath>',
+      '<image class="bar-thumb" href="', esc(b.thumb), '" x="', sh.label.x, '" y="', sh.label.y, '" width="', sh.label.w, '" height="', sh.label.h,
+      '" preserveAspectRatio="xMidYMid slice" clip-path="url(#lbl-', b.id, ')"/>');
+  } else {
+    const ly = sh.label.y + sh.label.h/2 - 4.5;
+    h.push('<g class="lblband"><rect x="', sh.label.x, '" y="', ly, '" width="', sh.label.w, '" height="9" rx="1.5"/>',
+      '<text x="22" y="', ly + 6.5, '" text-anchor="middle">', esc(b.name.slice(0, 8)), '</text></g>');
+  }
+  h.push('<path class="bar-outline" d="', sh.path, '"/>',
+    '<text class="bar-name" x="22" y="101" text-anchor="middle">', esc(name), '</text>',
+    '<g class="bar-edit" data-edit="', b.id, '"><circle cx="22" cy="112" r="9" fill="transparent"/><text x="22" y="115" text-anchor="middle">&#9998;</text></g>',
+    '</g>');
+  return h.join('');
+}
+function renderShelfBar(list, bottles){
+  const prev = {}; // levels as last rendered, so a change can animate
+  list.querySelectorAll('.bar-bottle').forEach(g => { prev[g.getAttribute('data-id')] = g.getAttribute('data-level'); });
+  const CELL = 62, PERROW = 5, VBW = 320, ROWH = 134;
+  const byCat = {};
+  for(const b of bottles) (byCat[b.category] = byCat[b.category] || []).push(b);
+  const html = [];
+  for(const cat of CATEGORIES){
+    if(!byCat[cat]) continue;
+    const bs = byCat[cat].sort((a,z) => a.name.localeCompare(z.name));
+    const rows = Math.ceil(bs.length / PERROW);
+    html.push('<div class="cathead barhead"><span>', esc(cat), '</span><span class="cnt">', S.bottles.filter(b => b.category === cat).length, '</span></div>');
+    html.push('<svg class="barshelf" data-cat="', esc(cat), '" viewBox="0 0 ', VBW, ' ', rows * ROWH, '">');
+    for(let r = 0; r < rows; r++)
+      html.push('<line class="shelfline" x1="2" x2="', VBW - 2, '" y1="', r*ROWH + 93, '" y2="', r*ROWH + 93, '"/>');
+    bs.forEach((b, i) => {
+      const row = Math.floor(i / PERROW), col = i % PERROW;
+      html.push(bottleSvg(b, 5 + col*CELL + 9, row*ROWH + 4));
+    });
+    html.push('</svg>');
+  }
+  list.innerHTML = html.join('');
+  list.querySelectorAll('.bar-bottle').forEach(g => {
+    const id = g.getAttribute('data-id'), level = g.getAttribute('data-level'), cat = g.getAttribute('data-cat');
+    g.addEventListener('click', e => {
+      if(e.target.closest('.bar-edit')){ openBottleForm(id); return; }
+      cycleLevel(id);
+    });
+    // a changed level starts the liquid at its old height, flushes styles, then
+    // lets the CSS transition carry it to the new one — the drop you can see
+    const was = prev[id];
+    if(!was || was === level) return;
+    const liq = g.querySelector('.bar-liquid');
+    const from = liquidRect(cat, was), to = liquidRect(cat, level);
+    liq.setAttribute('y', from.y); liq.setAttribute('height', from.h);
+    liq.setAttribute('class', 'bar-liquid ' + was);
+    void (g.ownerSVGElement && g.ownerSVGElement.getBoundingClientRect());
+    liq.setAttribute('y', to.y); liq.setAttribute('height', to.h);
+    liq.setAttribute('class', 'bar-liquid ' + level);
+  });
+}
 function renderSpecs(){
   const bases = Array.from(new Set(S.recipes.map(recipeBase))).sort();
   const fEl = document.getElementById('spec-filters');
@@ -1098,7 +1444,11 @@ function renderSpecs(){
     if(f === '__mk') makeableOnly = !makeableOnly; else specFilter = f;
     renderSpecs();
   }));
+  const vt = document.getElementById('btn-specsview');
+  vt.innerHTML = S.specsView === 'sky' ? ICON_LIST : ICON_SKY;
+  vt.title = S.specsView === 'sky' ? 'List view' : 'Flavor galaxy';
   const list = document.getElementById('spec-list');
+  if(S.specsView === 'sky'){ renderSpecsSky(list); return; }
   const html = [];
   const q = norm(specQuery);
   const rs = S.recipes.slice().sort((a,z)=>a.name.localeCompare(z.name));
@@ -1116,6 +1466,45 @@ function renderSpecs(){
   }
   list.innerHTML = html.length ? html.join('') : '<div class="dim" style="padding:20px 4px">No recipes match.</div>';
   list.querySelectorAll('.rcard').forEach(el => el.addEventListener('click', () => openRecipeDetail(el.dataset.id)));
+}
+/* every recipe as a star on the flavor field: chip filters HIDE, a search DIMS
+   the misses so the hits read as a spotlight. Same taps, same state, new sky. */
+function renderSpecsSky(list){
+  const q = norm(specQuery);
+  const dimStars = [], litStars = [];
+  for(const r of S.recipes){
+    if(specFilter !== 'all' && recipeBase(r) !== specFilter) continue;
+    const st = recipeStatus(r);
+    if(makeableOnly && !st.makeable) continue;
+    const cls = st.makeable ? (st.low ? 'lw' : 'mk') : 'dim';
+    const hit = !q || norm(r.name).includes(q) || r.ingredients.some(ing => norm(ingLabel(ing)).includes(q));
+    const p = starXY(r);
+    const parts = ['<g class="star ', cls, r.house ? ' house' : '', hit ? '' : ' faded',
+      '" data-id="', r.id, '" transform="translate(', p.x, ' ', p.y, ')">',
+      '<circle class="tap" r="24"/>']; // generous invisible tap circle
+    if(r.house) parts.push('<text class="core-star" text-anchor="middle" dy="4.5">★</text>');
+    else if(cls === 'dim') parts.push('<circle class="core" r="2"/>');
+    else parts.push('<circle class="glow" r="9"/><circle class="core" r="3.2"/>');
+    if(r.house || cls !== 'dim'){
+      const nm = r.name.length > 16 ? r.name.slice(0, 15) + '…' : r.name;
+      parts.push('<text class="slabel" x="9" y="3.5">', esc(nm), '</text>');
+    }
+    parts.push('</g>');
+    (cls === 'dim' && !r.house ? dimStars : litStars).push(parts.join(''));
+  }
+  list.innerHTML = '<svg id="galaxy" viewBox="0 0 400 400">' +
+    '<defs><radialGradient id="gvig" cx="50%" cy="45%" r="72%">' +
+    '<stop offset="55%" stop-color="rgba(0,0,0,0)"/><stop offset="100%" stop-color="rgba(0,0,0,.55)"/></radialGradient></defs>' +
+    '<rect x="1" y="1" width="398" height="398" rx="14" fill="var(--bg2)"/>' +
+    '<rect x="1" y="1" width="398" height="398" rx="14" fill="url(#gvig)"/>' +
+    '<rect x="1" y="1" width="398" height="398" rx="14" fill="none" stroke="var(--line)"/>' +
+    '<text class="gx-axis" x="12" y="203">bitter</text>' +
+    '<text class="gx-axis" x="388" y="203" text-anchor="end">bright</text>' +
+    '<text class="gx-axis" x="200" y="16" text-anchor="middle">refreshing</text>' +
+    '<text class="gx-axis" x="200" y="391" text-anchor="middle">boozy</text>' +
+    dimStars.join('') + litStars.join('') + '</svg>' +
+    (dimStars.length || litStars.length ? '' : '<div class="dim" style="padding:20px 4px">No recipes match.</div>');
+  list.querySelectorAll('#galaxy .star').forEach(g => g.addEventListener('click', () => openRecipeDetail(g.getAttribute('data-id'))));
 }
 function renderTonight(){
   document.getElementById('bartender-box').classList.toggle('hidden',
@@ -1554,11 +1943,15 @@ function openBottleForm(id){
     '<label class="fieldlbl">Category</label>' + catSelect('bf-cat', b.category) +
     '<label class="fieldlbl">Subtype <span class="dim">(matches recipes — pick from the list when you can)</span></label>' + subInput('bf-sub', b.category, b.subtype) +
     '<label class="fieldlbl">Level</label><div class="seg" id="bf-lvl">' + LEVELS.map(l => '<button data-l="' + l + '"' + (l===b.level?' class="on"':'') + '>' + l + '</button>').join('') + '</div>' +
+    (b.thumb ? '<div id="bf-thumbwrap"><label class="fieldlbl">Label photo <span class="dim">(shown on the bar shelf)</span></label>' +
+      '<div class="rowline"><img class="wthumb" src="' + esc(b.thumb) + '"><button class="abtn ghost" id="bf-thumbdel">Remove photo label</button></div></div>' : '') +
     '<label class="fieldlbl">Notes</label><textarea id="bf-notes" rows="2">' + esc(b.notes||'') + '</textarea>' +
     '<div style="display:flex;gap:8px;margin-top:16px">' +
       (id ? '<button class="abtn danger" id="bf-del">Delete</button>' : '') +
       '<button class="abtn" id="bf-save" style="flex:1">Save bottle</button></div>');
-  let level = b.level;
+  let level = b.level, keepThumb = !!b.thumb;
+  const thumbDel = document.getElementById('bf-thumbdel');
+  if(thumbDel) thumbDel.onclick = () => { keepThumb = false; document.getElementById('bf-thumbwrap').classList.add('hidden'); };
   const wrap = document.getElementById('modal');
   wrap.querySelector('.bf-cat').addEventListener('change', e => {
     const holder = wrap.querySelector('.bf-sub').parentNode;
@@ -1572,7 +1965,8 @@ function openBottleForm(id){
   document.getElementById('bf-save').onclick = () => {
     const ok = upsertBottle({ id: id || undefined, name: document.getElementById('bf-name').value,
       category: wrap.querySelector('.bf-cat').value, subtype: wrap.querySelector('.bf-sub').value,
-      level, notes: document.getElementById('bf-notes').value });
+      level, notes: document.getElementById('bf-notes').value,
+      thumb: keepThumb && b.thumb ? b.thumb : undefined });
     if(!ok){ toast('Give it a name first.'); return; }
     closeModal();
   };
@@ -1584,6 +1978,81 @@ function scaleQty(q, f){
   if(!isFinite(n) || f === 1) return q;
   return String(Math.round(n * f * 100) / 100);
 }
+/* Liquid Intelligence in the detail sheet: one chart, temperature (brass) and
+   dilution (cream) locked together by the energy balance, the other method
+   ghosted behind, a scrubbable cursor, and a one-line verdict. */
+const LI_W = 320, LI_H = 170, LI_PL = 34, LI_PR = 36, LI_PT = 12, LI_PB = 20;
+function liData(r){
+  if(!S.nerdMode) return null;
+  if(r.method !== 'stir' && r.method !== 'shake') return null; // no agitation model for build/blend
+  if(!drinkStats(r)) return null;
+  const D = r.method === 'shake' ? 30 : 120;
+  const other = r.method === 'shake' ? 'stir' : 'shake';
+  return { method: r.method, D, main: chillCurve(r, r.method, D), ghost: chillCurve(r, other, D),
+    serve: Math.min(D, liServe(r.method)) };
+}
+function liX(li, t){ return LI_PL + t/li.D*(LI_W-LI_PL-LI_PR); }
+function liYT(T){ return LI_PT + (20-T)/30*(LI_H-LI_PT-LI_PB); }        // temp scale −10..20°C
+function liYD(d){ return LI_PT + (60-Math.min(60,d))/60*(LI_H-LI_PT-LI_PB); } // dilution scale 0..60%
+function liVerdict(li){
+  const p = li.main[Math.min(li.D, Math.max(5, Math.round(li.serve/5)*5))];
+  return (li.method === 'shake' ? 'Shake' : 'Stir') + ' about ' + p.t + ' seconds: ' + fmtTemp(p.temp) +
+    ', ' + Math.round(p.dilutionPct) + '% dilution, lands at ' + Math.round(p.abv*100) + '% ABV.';
+}
+function liBodyHtml(li){
+  const path = (pts, y) => pts.map((p,i) => (i?'L':'M') + Math.round(liX(li,p.t)*10)/10 + ' ' + Math.round(y(p)*10)/10).join('');
+  const xs = liX(li, li.serve);
+  const sp = li.main[li.serve];
+  const axL = [[20,'20°'],[0,'0°'],[-10,'−10°']].map(a => '<text class="li-ax" x="' + (LI_PL-4) + '" y="' + (liYT(a[0])+3) + '" text-anchor="end">' + a[1] + '</text>').join('');
+  const axR = [[0,'0%'],[30,'30%'],[60,'60%']].map(a => '<text class="li-ax" x="' + (LI_W-LI_PR+5) + '" y="' + (liYD(a[0])+3) + '">' + a[1] + '</text>').join('');
+  const axB = '<text class="li-ax" x="' + LI_PL + '" y="' + (LI_H-6) + '">0s</text>' +
+    '<text class="li-ax" x="' + (LI_W-LI_PR) + '" y="' + (LI_H-6) + '" text-anchor="end">' + li.D + 's</text>';
+  const mid = Math.round(li.D*0.55);
+  return '<svg id="li-chart" viewBox="0 0 ' + LI_W + ' ' + LI_H + '">' +
+    '<path class="li-ghost" d="' + path(li.ghost, p => liYT(p.temp)) + '"/>' +
+    '<path class="li-dil" d="' + path(li.main, p => liYD(p.dilutionPct)) + '"/>' +
+    '<path class="li-temp" d="' + path(li.main, p => liYT(p.temp)) + '"/>' +
+    '<text class="li-ax li-lbl" fill="var(--brass2)" x="' + liX(li,mid) + '" y="' + (liYT(li.main[mid].temp)-5) + '" text-anchor="middle">temperature</text>' +
+    '<text class="li-ax li-lbl" fill="var(--ink)" x="' + liX(li,mid) + '" y="' + (liYD(li.main[mid].dilutionPct)+11) + '" text-anchor="middle">dilution</text>' +
+    '<line class="li-target" x1="' + xs + '" x2="' + xs + '" y1="' + LI_PT + '" y2="' + (LI_H-LI_PB) + '"/>' +
+    '<circle cx="' + xs + '" cy="' + liYT(sp.temp) + '" r="3" fill="var(--brass2)"/>' +
+    '<line id="li-cursor" x1="' + xs + '" x2="' + xs + '" y1="' + LI_PT + '" y2="' + (LI_H-LI_PB) + '"/>' +
+    axL + axR + axB +
+    '<rect x="' + LI_PL + '" y="0" width="' + (LI_W-LI_PL-LI_PR) + '" height="' + LI_H + '" fill="transparent" style="pointer-events:all"/>' +
+    '</svg>' +
+    '<div id="li-read" class="small mut"></div>' +
+    '<div id="li-verdict">' + esc(liVerdict(li)) + '</div>' +
+    '<div class="small dim">dashed = ' + (li.method === 'shake' ? 'stirred' : 'shaken') + ' instead &middot; drag the chart to scrub</div>';
+}
+function wireLI(li){
+  const tog = document.getElementById('li-toggle');
+  if(!tog) return;
+  tog.onclick = () => {
+    const body = document.getElementById('li-body');
+    body.classList.toggle('hidden');
+    document.getElementById('li-chev').innerHTML = body.classList.contains('hidden') ? '&#9656;' : '&#9662;';
+  };
+  const svg = document.getElementById('li-chart');
+  const setCursor = t => {
+    t = Math.max(0, Math.min(li.D, Math.round(t)));
+    const p = li.main[t], x = liX(li, t);
+    const c = document.getElementById('li-cursor');
+    c.setAttribute('x1', x); c.setAttribute('x2', x);
+    document.getElementById('li-read').textContent = t + ' s — ' + fmtTemp(p.temp) + ' · ' +
+      Math.round(p.dilutionPct) + '% dilution · ' + Math.round(p.abv*100) + '% ABV';
+  };
+  const fromEvent = ev => {
+    const rect = svg.getBoundingClientRect();
+    const rel = ((ev.clientX||0) - rect.left) * (LI_W / (rect.width || LI_W));
+    setCursor((rel - LI_PL) / (LI_W - LI_PL - LI_PR) * li.D);
+  };
+  let down = false;
+  svg.addEventListener('pointerdown', ev => { down = true; try{ svg.setPointerCapture(ev.pointerId); }catch(e){} fromEvent(ev); });
+  svg.addEventListener('pointermove', ev => { if(down) fromEvent(ev); });
+  svg.addEventListener('pointerup', () => { down = false; });
+  svg.addEventListener('pointercancel', () => { down = false; });
+  setCursor(li.serve);
+}
 function openRecipeDetail(id){
   const r = S.recipes.find(x => x.id === id); if(!r) return;
   const makes = r.servings || 1;
@@ -1594,6 +2063,7 @@ function openRecipeDetail(id){
       '<span class="lbl">' + esc(ingLabel(ing)) + (ing.note ? ' <span class="dim small">(' + esc(ing.note) + ')</span>' : '') +
       (flag ? ' <span class="small" style="color:var(--bad)">missing</span>' : (s.ok && s.low ? ' <span class="lowtag">low</span>' : '')) + '</span></div>';
   }).join('');
+  const li = liData(r);
   openModal('<button class="mclose" onclick="closeModal()">&times;</button>' +
     '<h2>' + (r.house?'<span class="housestar">★</span> ':'') + esc(r.name) + '</h2>' +
     '<div class="detmeta">' + esc(r.method) + ' &middot; ' + esc(r.glass||'') + (r.garnish ? ' &middot; ' + esc(r.garnish) : '') + ' &middot; makes ' + makes + '</div>' +
@@ -1602,6 +2072,8 @@ function openRecipeDetail(id){
     '<div class="rowline" style="margin-bottom:8px;gap:8px"><span class="small mut">Scale for</span>' +
     '<input id="rd-scale" type="number" min="1" value="' + makes + '" style="max-width:80px"><span class="small mut">drink' + (makes===1?'':'s') + '</span></div>' +
     '<div id="rd-ings">' + ingLines(1) + '</div>' +
+    (li ? '<hr class="sep"><div id="li-sec"><button id="li-toggle"><span class="t">Liquid Intelligence</span><span id="li-chev" class="dim">&#9656;</span></button>' +
+      '<div id="li-body" class="hidden">' + liBodyHtml(li) + '</div></div>' : '') +
     '<label class="fieldlbl">Notes</label><textarea id="rd-notes" rows="2">' + esc(r.notes||'') + '</textarea>' +
     '<label class="fieldlbl">Menu description <span class="dim">(what guests see — blank = automatic)</span></label>' +
     '<input id="rd-mdesc" value="' + esc(r.menuDesc||'') + '" placeholder="' + esc(autoDesc(r)) + '">' +
@@ -1610,6 +2082,7 @@ function openRecipeDetail(id){
       '<button class="abtn danger" id="rd-del">Delete</button>' +
       '<button class="abtn ghost" id="rd-edit">Edit spec</button>' +
       '<button class="abtn" id="rd-done" style="flex:1">Done</button></div>');
+  if(li) wireLI(li);
   document.getElementById('rd-stars').addEventListener('click', e => {
     const s = e.target.closest('[data-s]'); if(!s) return;
     r.rating = (+s.dataset.s === r.rating) ? 0 : +s.dataset.s;
@@ -1735,7 +2208,7 @@ function openRecipeForm(id, pre){
       method: document.getElementById('rf-method').value, glass: document.getElementById('rf-glass').value.trim(),
       garnish: document.getElementById('rf-garnish').value.trim(), notes: document.getElementById('rf-notes').value,
       menuDesc: document.getElementById('rf-mdesc').value.trim(),
-      rating: r.rating||0, house: document.getElementById('rf-house').checked, ingredients });
+      rating: r.rating||0, house: document.getElementById('rf-house').checked, flavor: r.flavor, ingredients });
     if(!ok){ toast('A recipe needs a name and at least one ingredient.'); return; }
     closeModal();
   };
@@ -1745,6 +2218,8 @@ function openSettings(){
     '<label class="fieldlbl">Menu title <span class="dim">(shown in guest Menu mode)</span></label><input id="st-title" value="' + esc(S.menuTitle) + '">' +
     '<label class="fieldlbl">Staples <span class="dim">(household ingredients suggested in recipe forms — comma separated)</span></label>' +
     '<textarea id="st-staples" rows="3">' + esc(S.staples.join(', ')) + '</textarea>' +
+    '<label class="rowline" style="gap:8px;margin-top:14px"><input type="checkbox" id="st-nerd" style="width:auto;transform:scale(1.15)"' + (S.nerdMode ? ' checked' : '') + '>' +
+    '<span>Liquid Intelligence in recipe details <span class="dim small">(chilling &amp; dilution physics for stirred and shaken drinks)</span></span></label>' +
     '<hr class="sep"><h3 class="serif" style="color:var(--brass2)">Backup</h3>' +
     (storageFull ? '<div class="small" style="color:var(--bad);margin:6px 0">Storage is full — recent changes may not be saved. Remove wishlist photos or export a backup.</div>' : '') +
     '<div class="small mut" style="margin:4px 0 10px">Your bar lives only in this browser — export a backup now and then.</div>' +
@@ -1767,6 +2242,7 @@ function openSettings(){
     '<button class="abtn" id="st-done" style="width:100%;margin-top:10px">Done</button>');
   document.getElementById('st-export').onclick = downloadBackup;
   document.getElementById('st-import').onclick = () => document.getElementById('import-file').click();
+  document.getElementById('st-nerd').addEventListener('change', e => { S.nerdMode = e.target.checked; save(); });
   const syncOn = document.getElementById('st-sync-on');
   if(syncOn) syncOn.onclick = () => { enableSync(); openSettings(); toast('Cloud backup is on — copy your code and keep it safe.'); };
   const codeEl = document.getElementById('st-code');
@@ -1847,6 +2323,8 @@ document.getElementById('import-file').addEventListener('change', e => {
 });
 document.getElementById('shelf-search').addEventListener('input', e => { shelfQuery = e.target.value; renderShelf(); });
 document.getElementById('spec-search').addEventListener('input', e => { specQuery = e.target.value; renderSpecs(); });
+document.getElementById('btn-shelfview').addEventListener('click', () => { S.shelfView = S.shelfView === 'bar' ? 'list' : 'bar'; save(); renderShelf(); });
+document.getElementById('btn-specsview').addEventListener('click', () => { S.specsView = S.specsView === 'sky' ? 'list' : 'sky'; save(); renderSpecs(); });
 document.getElementById('menu-exit').addEventListener('click', () => setTab('shelf'));
 document.querySelectorAll('#tabbar button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 document.getElementById('modalwrap').addEventListener('click', e => { if(e.target.id === 'modalwrap') closeModal(); });

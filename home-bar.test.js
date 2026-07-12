@@ -700,6 +700,190 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('window.dispatchEvent(new PopStateEvent("popstate"))'); await sleep(10);
   assert(!d.getElementById('modalwrap').classList.contains('on'), 'popstate closes the modal instead of leaving the page');
 
+  // ================= BAR-SPEC-1.2: same data, same verbs, different paint =================
+  // --- toggle infrastructure ---
+  assert(w.eval('S.shelfView')==='list' && w.eval('S.specsView')==='list' && w.eval('S.nerdMode')===false, '1.2 view fields default to list / list / nerd off');
+  assert(w.eval('fresh().shelfView')==='list' && w.eval('fresh().specsView')==='list' && w.eval('fresh().nerdMode')===false, 'fresh state carries the 1.2 defaults');
+  w.eval('S.shelfView="bar"; S.specsView="sky"; S.nerdMode=true; saveNow();');
+  assert(w.eval('load().shelfView')==='bar' && w.eval('load().specsView')==='sky' && w.eval('load().nerdMode')===true, 'flipped toggles survive a reload');
+  const preView = JSON.parse(w.eval('exportJSON()'));
+  delete preView.shelfView; delete preView.specsView; delete preView.nerdMode;
+  assert(w.eval('importJSON('+JSON.stringify(JSON.stringify(preView))+')')===null, 'a pre-1.2 backup still imports');
+  assert(w.eval('S.shelfView')==='list' && w.eval('S.specsView')==='list' && w.eval('S.nerdMode')===false, 'missing view fields default cleanly on import');
+  const preFlavor = JSON.parse(w.eval('exportJSON()'));
+  delete preFlavor.recipes.find(r=>r.id==='r23').flavor;                       // a pre-1.2 classic
+  preFlavor.recipes.find(r=>r.id==='r24').flavor = { x:0.9, y:0.9 };           // a user-moved one
+  assert(w.eval('importJSON('+JSON.stringify(JSON.stringify(preFlavor))+')')===null, 'a backup with flavorless classics imports');
+  assert(JSON.parse(w.eval('JSON.stringify(S.recipes.find(r=>r.id==="r23").flavor)')).x===0.12, 'an unplaced classic gets its baked coordinates back');
+  assert(JSON.parse(w.eval('JSON.stringify(S.recipes.find(r=>r.id==="r24").flavor)')).x===0.9, 'a recipe that already has coordinates is never touched');
+  w.eval('openRecipeForm("r24")'); await sleep(20);
+  d.getElementById('rf-save').click(); await sleep(30);
+  assert(JSON.parse(w.eval('JSON.stringify(S.recipes.find(r=>r.id==="r24").flavor)')).x===0.9, 'editing a recipe through the form keeps its flavor coordinates');
+
+  // --- the shelf becomes a shelf ---
+  w.eval('setTab("shelf")');
+  d.getElementById('btn-shelfview').click(); await sleep(30);
+  assert(w.eval('S.shelfView')==='bar', 'the toggle next to search flips the shelf to bar view');
+  const stockedCats = JSON.parse(w.eval('JSON.stringify(Array.from(new Set(S.bottles.map(b=>b.category))))'));
+  assert(d.querySelectorAll('#shelf-list svg.barshelf').length===stockedCats.length, 'one shelf svg per stocked category, empty categories skipped');
+  assert(d.querySelectorAll('#shelf-list .bar-bottle').length===w.eval('S.bottles.length'), 'every bottle stands on a shelf');
+  const fullId = w.eval('S.bottles.find(b=>b.level==="full").id');
+  const fullName = w.eval('S.bottles.find(b=>b.id==="'+fullId+'").name');
+  const fullCat = w.eval('S.bottles.find(b=>b.id==="'+fullId+'").category');
+  let bg = d.querySelector('.bar-bottle[data-id="'+fullId+'"]');
+  let liq = bg.querySelector('.bar-liquid');
+  const expFull = JSON.parse(w.eval('JSON.stringify(liquidRect("'+fullCat+'","full"))'));
+  assert(Math.abs(+liq.getAttribute('height')-expFull.h)<0.01 && Math.abs(+liq.getAttribute('y')-expFull.y)<0.01, 'a full bottle\'s liquid fills ~85% of its glass');
+  assert(bg.querySelector('.lblband')!==null, 'no photo yet: the brass name band fills the label zone');
+  bg.dispatchEvent(new w.Event('click',{bubbles:true})); await sleep(30);
+  assert(w.eval('S.bottles.find(b=>b.id==="'+fullId+'").level')==='low', 'tapping a silhouette calls through to cycleLevel');
+  bg = d.querySelector('.bar-bottle[data-id="'+fullId+'"]');
+  liq = bg.querySelector('.bar-liquid');
+  const expLow = JSON.parse(w.eval('JSON.stringify(liquidRect("'+fullCat+'","low"))'));
+  assert(Math.abs(+liq.getAttribute('height')-expLow.h)<0.01 && (liq.getAttribute('class')||'').includes('low'), 'the re-render drops the liquid to the low mark');
+  bg.querySelector('.bar-edit').dispatchEvent(new w.Event('click',{bubbles:true})); await sleep(30);
+  assert(d.getElementById('modalwrap').classList.contains('on') && d.getElementById('bf-name').value===fullName, 'the ✎ dot opens the bottle form, not a level cycle');
+  w.eval('closeModal()'); await sleep(10);
+  w.eval('S.bottles.find(b=>b.id==="'+fullId+'").level="out"; renderShelf();'); await sleep(20);
+  bg = d.querySelector('.bar-bottle[data-id="'+fullId+'"]');
+  assert((bg.getAttribute('class')||'').includes('out') && +bg.querySelector('.bar-liquid').getAttribute('height')===0, 'an out bottle ghosts: no liquid, struck styling');
+  w.eval('S.bottles.find(b=>b.id==="'+fullId+'").level="full"; save(); renderShelf();'); await sleep(20);
+  d.getElementById('shelf-search').value='eagle';
+  d.getElementById('shelf-search').dispatchEvent(new w.Event('input')); await sleep(20);
+  assert(d.querySelectorAll('#shelf-list .bar-bottle').length===1, 'the search field still filters the bar view');
+  d.getElementById('shelf-search').value='';
+  d.getElementById('shelf-search').dispatchEvent(new w.Event('input')); await sleep(20);
+
+  // --- label thumbnails from the AI scan ---
+  w.eval('window.__realCropThumb = cropThumb; cropThumb = async () => "data:image/jpeg;base64,dGh1bWI=";');
+  w.__scanResult = { bottles: [
+    { name:'Boxed Gin Bottle', category:'gin', box:{ x:0.1, y:0.2, w:0.15, h:0.5 } },
+    { name:'Plain Rum Bottle', category:'rum' },
+    { name:'Bad Box Bottle', category:'vodka', box:{ x:2, y:0, w:9, h:9 } },
+  ]};
+  const scanned2 = await w.requestScan('image/jpeg','aGVsbG8=');
+  w.openConfirmSheet(scanned2, 'data:image/jpeg;base64,cGhvdG8='); await sleep(50);
+  assert(d.querySelectorAll('#modal img.scanthumb').length===1, 'the confirm sheet shows a crop beside the boxed row only');
+  assert([...d.querySelectorAll('#modal .scanrow')].filter(r=>r.querySelector('.scanthumb')).length===1, 'a bad box is rejected — no thumbnail machinery for that row');
+  d.getElementById('sr-commit').click(); await sleep(30);
+  assert(String(w.eval('(S.bottles.find(b=>b.name==="Boxed Gin Bottle")||{}).thumb||""')).startsWith('data:image'), 'a committed row stores its crop as bottle.thumb');
+  assert(w.eval('S.bottles.find(b=>b.name==="Plain Rum Bottle").thumb')===undefined, 'no box, no thumb — the field never blocks');
+  w.eval('renderShelf()'); await sleep(20);
+  const boxedId = w.eval('S.bottles.find(b=>b.name==="Boxed Gin Bottle").id');
+  assert(d.querySelector('.bar-bottle[data-id="'+boxedId+'"] image.bar-thumb')!==null, 'the bar view clips the crop into the label zone');
+  w.eval('openBottleForm("'+boxedId+'")'); await sleep(20);
+  d.getElementById('bf-save').click(); await sleep(20);
+  assert(String(w.eval('(S.bottles.find(b=>b.id==="'+boxedId+'")||{}).thumb||""')).startsWith('data:image'), 'an ordinary edit keeps the photo label');
+  w.eval('openBottleForm("'+boxedId+'")'); await sleep(20);
+  assert(d.getElementById('bf-thumbdel')!==null, 'the edit form offers Remove photo label');
+  d.getElementById('bf-thumbdel').click(); await sleep(10);
+  d.getElementById('bf-save').click(); await sleep(20);
+  assert(w.eval('S.bottles.find(b=>b.id==="'+boxedId+'").thumb')===undefined, 'removing the photo label really removes it');
+  w.eval('renderShelf()'); await sleep(20);
+  assert(d.querySelector('.bar-bottle[data-id="'+boxedId+'"] .lblband')!==null, 'and the brass band returns');
+  w.eval('S.bottles.find(b=>b.id==="'+boxedId+'").thumb="data:image/jpeg;base64,dGh1bWI="; saveNow();');
+  const thumbBackup = w.eval('exportJSON()');
+  w.eval('localStorage.clear(); S=fresh(); renderAll();');
+  assert(w.eval('importJSON('+JSON.stringify(thumbBackup)+')')===null, 'a backup with thumbs imports');
+  assert(String(w.eval('(S.bottles.find(b=>b.name==="Boxed Gin Bottle")||{}).thumb||""')).startsWith('data:image'), 'thumb survives export → wipe → import');
+  w.eval('cropThumb = window.__realCropThumb;');
+  w.eval('deleteBottle(S.bottles.find(b=>b.name==="Boxed Gin Bottle").id)'); await sleep(20);
+  w.eval('deleteBottle(S.bottles.find(b=>b.name==="Plain Rum Bottle").id)'); await sleep(20);
+  w.eval('deleteBottle(S.bottles.find(b=>b.name==="Bad Box Bottle").id)'); await sleep(20);
+  d.getElementById('btn-shelfview').click(); await sleep(20);
+  assert(w.eval('S.shelfView')==='list' && d.querySelector('#shelf-list .bottle')!==null, 'toggling back restores the list view untouched');
+
+  // --- the flavor galaxy ---
+  w.eval('setTab("specs")');
+  d.getElementById('btn-specsview').click(); await sleep(30);
+  assert(w.eval('S.specsView')==='sky' && d.querySelector('#spec-list svg#galaxy')!==null, 'the specs toggle turns the list into a star field');
+  assert(d.querySelectorAll('#galaxy .star').length===w.eval('S.recipes.length'), 'every recipe is a star');
+  const negXY = JSON.parse(w.eval('JSON.stringify(starXY(S.recipes.find(r=>r.id==="r23")))'));
+  const negStar = d.querySelector('#galaxy .star[data-id="r23"]');
+  assert(negStar.getAttribute('transform')==='translate('+negXY.x+' '+negXY.y+')', 'seeded classics render at their baked coordinates');
+  const corner = ['r07','r23','r33'].map(id=>JSON.parse(w.eval('JSON.stringify(flavorPos(S.recipes.find(r=>r.id==="'+id+'")))')));
+  assert(corner.every(p=>p.x<0.3 && p.y<0.3), 'Negroni, Boulevardier, Black Manhattan hold the bitter-boozy corner');
+  const tiki = ['r17','r19','r20'].map(id=>JSON.parse(w.eval('JSON.stringify(flavorPos(S.recipes.find(r=>r.id==="'+id+'")))')));
+  assert(tiki.every(p=>p.y>0.6) && tiki[1].x<tiki[0].x && tiki[1].x<tiki[2].x, 'the tiki nebula floats bright-refreshing, Jungle Bird pulled bitterward');
+  w.upsertRecipe({ name:'Nova Test', method:'shake', glass:'coupe', garnish:'', notes:'', rating:0, house:false,
+    ingredients:[ { qty:'2', unit:'oz', req:{ tag:{ category:'gin' } } }, { qty:'0.75', unit:'oz', req:{ staple:'lime' } }, { qty:'3', unit:'oz', req:{ tag:{ category:'mixer', subtype:'soda water' } } } ] });
+  await sleep(20);
+  const nova = 'S.recipes.find(r=>r.name==="Nova Test")';
+  const f1 = w.eval('JSON.stringify(flavorOf('+nova+'))');
+  assert(f1===w.eval('JSON.stringify(flavorOf('+nova+'))'), 'flavorOf is deterministic — same recipe, same spot');
+  const fpos = JSON.parse(f1);
+  assert(fpos.x>0.5 && fpos.y>0.6 && fpos.x<=0.96 && fpos.y<=0.96, 'citrus pushes bright, soda pushes refreshing, clamped inside the frame');
+  assert(d.querySelector('#galaxy .star[data-id="'+w.eval(nova+'.id')+'"]')!==null, 'a recipe without baked flavor still lands on the field');
+  assert(/\b(mk|lw)\b/.test(negStar.getAttribute('class')||''), 'Negroni is lit while its bottles are stocked');
+  w.eval('S.bottles.find(b=>b.name==="Campari Bitter").level="out"; save(); renderSpecs();'); await sleep(20);
+  const affected = ['r23','r07','r19'].map(id=>d.querySelector('#galaxy .star[data-id="'+id+'"]'));
+  assert(affected.every(s=>(s.getAttribute('class')||'').includes('dim')), 'cycling the Campari out dims Negroni, Boulevardier, and Jungle Bird in one render');
+  affected[0].dispatchEvent(new w.Event('click',{bubbles:true})); await sleep(20);
+  assert(d.getElementById('modalwrap').classList.contains('on') && d.getElementById('modal').textContent.includes('Negroni'), 'tapping a star opens the same recipe detail');
+  w.eval('closeModal()'); await sleep(10);
+  const mkChip2 = [...d.querySelectorAll('#spec-filters .chip')].find(c=>c.dataset.f==='__mk');
+  mkChip2.click(); await sleep(20);
+  assert(d.querySelectorAll('#galaxy .star').length>0 && [...d.querySelectorAll('#galaxy .star')].every(s=>!(s.getAttribute('class')||'').includes('dim')), 'the makeable-only chip hides the dim stars');
+  mkChip2.click(); await sleep(20);
+  d.getElementById('spec-search').value='campari';
+  d.getElementById('spec-search').dispatchEvent(new w.Event('input')); await sleep(20);
+  const negSpot = d.querySelector('#galaxy .star[data-id="r23"]');
+  const martiniSpot = d.querySelector('#galaxy .star[data-id="r24"]');
+  assert(!(negSpot.getAttribute('class')||'').includes('faded') && (martiniSpot.getAttribute('class')||'').includes('faded'), 'a search keeps hits lit and fades the rest — a spotlight, not a filter');
+  d.getElementById('spec-search').value='';
+  d.getElementById('spec-search').dispatchEvent(new w.Event('input')); await sleep(20);
+  w.eval('S.bottles.find(b=>b.name==="Campari Bitter").level="low"; save();');
+  w.eval('deleteRecipe('+nova+'.id)'); await sleep(20);
+  d.getElementById('btn-specsview').click(); await sleep(20);
+  assert(w.eval('S.specsView')==='list' && d.querySelector('#spec-list .rcard')!==null, 'toggling back restores the recipe cards');
+
+  // --- liquid intelligence: the model ---
+  const dq = 'S.recipes.find(r=>r.id==="r15")'; // the seeded Daiquiri
+  const stats = JSON.parse(w.eval('JSON.stringify(drinkStats('+dq+'))'));
+  assert(Math.abs(stats.volOz-3.75)<1e-9, 'drinkStats: the Daiquiri is 3.75 oz as written');
+  assert(Math.abs(stats.abv-(2*0.40)/3.75)<1e-9, 'drinkStats: rum is the only alcohol — ~21% ABV in the glass');
+  const shakeCurve = JSON.parse(w.eval('JSON.stringify(chillCurve('+dq+',"shake",40))'));
+  const stirCurve = JSON.parse(w.eval('JSON.stringify(chillCurve('+dq+',"stir",180))'));
+  assert(shakeCurve.length===41 && stirCurve.length===181, 'chillCurve samples once per second');
+  const monoT = c=>c.every((p,i)=>i===0||p.temp<=c[i-1].temp+1e-9);
+  const monoD = c=>c.every((p,i)=>i===0||p.dilutionPct>=c[i-1].dilutionPct-1e-9);
+  assert(monoT(shakeCurve)&&monoT(stirCurve), 'temperature only ever falls');
+  assert(monoD(shakeCurve)&&monoD(stirCurve), 'dilution only ever rises');
+  const balanced = c=>c.every(p=>{
+    const mw = stats.massG*3.8*(20-p.temp)/(334+4.18*p.temp);
+    return Math.abs(p.dilutionPct-(mw/stats.massG*100))<1e-6;
+  });
+  assert(balanced(shakeCurve)&&balanced(stirCurve), 'every sample satisfies m_w = m_d·c_d·(T0−T)/(L_f+c_w·T) — temp and dilution never move independently');
+  const reach = (c,T)=>{ const p=c.find(x=>x.temp<=T); return p?p.t:Infinity; };
+  assert(reach(shakeCurve,-5)<reach(stirCurve,-5), 'a shake reaches −5°C faster than a stir ever will');
+  assert(shakeCurve[40].abv<stats.abv, 'melt water lowers the ABV as the drink chills');
+
+  // --- liquid intelligence: the sheet ---
+  w.eval('S.nerdMode=false; save(); openRecipeDetail("r15")'); await sleep(20);
+  assert(d.getElementById('li-sec')===null, 'nerd mode off: the detail sheet is exactly yesterday\'s');
+  w.eval('closeModal(); S.nerdMode=true; save(); openRecipeDetail("r15")'); await sleep(20);
+  assert(d.getElementById('li-sec')!==null && d.getElementById('li-body').classList.contains('hidden'), 'nerd mode on: the section is there, collapsed by default');
+  d.getElementById('li-toggle').click(); await sleep(20);
+  assert(!d.getElementById('li-body').classList.contains('hidden'), 'tapping the header expands it');
+  assert(d.querySelector('#li-chart .li-temp')!==null && d.querySelector('#li-chart .li-dil')!==null, 'the chart draws temperature and dilution together');
+  assert(d.querySelector('#li-chart .li-ghost')!==null, 'the other method\'s curve is ghosted behind');
+  assert(/Shake about \d+ seconds: −?[\d.]+°C, \d+% dilution, lands at \d+% ABV\./.test(d.getElementById('li-verdict').textContent), 'the verdict line is recomputed from the model');
+  assert(/\d+ s — /.test(d.getElementById('li-read').textContent), 'the scrub readout starts at the serve point');
+  w.eval('closeModal(); openRecipeDetail("r09")'); await sleep(20); // Highball = build
+  assert(d.getElementById('li-sec')===null, 'build recipes get no physics section');
+  w.eval('closeModal()');
+  w.upsertRecipe({ name:'Zero Vol', method:'stir', glass:'rocks', garnish:'', notes:'', rating:0, house:false,
+    ingredients:[ { qty:'1', unit:'rinse', req:{ tag:{ category:'liqueur', subtype:'absinthe' } } }, { qty:'8', unit:'leaf', req:{ staple:'mint' } } ] });
+  w.eval('openRecipeDetail(S.recipes.find(r=>r.name==="Zero Vol").id)'); await sleep(20);
+  assert(d.getElementById('li-sec')===null, 'no parseable volume: the section hides rather than showing nonsense');
+  w.eval('closeModal(); deleteRecipe(S.recipes.find(r=>r.name==="Zero Vol").id);'); await sleep(20);
+  w.eval('openSettings()'); await sleep(20);
+  assert(d.getElementById('st-nerd')!==null && d.getElementById('st-nerd').checked===true, 'Settings exposes the Liquid Intelligence switch');
+  d.getElementById('st-nerd').checked=false;
+  d.getElementById('st-nerd').dispatchEvent(new w.Event('change')); await sleep(20);
+  assert(w.eval('S.nerdMode')===false, 'flipping the switch persists');
+  w.eval('closeModal(); setTab("shelf");');
+
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
 
