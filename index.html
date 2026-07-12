@@ -269,6 +269,32 @@ const SUBTYPES = {
   other:[]
 };
 const DEFAULT_STAPLES = ['lime','lemon','sugar','simple syrup','honey','agave syrup','egg white','mint','salt','espresso','coconut cream','cream'];
+// beer & wine autocomplete catalog — the user's own additions (S.customBW) suggest first
+const BEERWINE_CATALOG = [
+  // beers
+  'Modelo Especial','Negra Modelo','Corona Extra','Corona Premier','Pacifico','Tecate','Victoria','Dos Equis Lager',
+  'Medalla Light','Presidente','Red Stripe','Michelob Ultra','Bud Light','Budweiser','Coors Light','Miller Lite',
+  'Yuengling Lager','Pabst Blue Ribbon','Heineken','Heineken 0.0','Stella Artois','Amstel Light','Peroni',
+  'Birra Moretti','Guinness Draught','Smithwick’s','Harp Lager','Sapporo','Asahi Super Dry','Kirin Ichiban',
+  'Tsingtao','Singha','Blue Moon Belgian White','Allagash White','Hoegaarden','Shock Top','Sam Adams Boston Lager',
+  'Sierra Nevada Pale Ale','Lagunitas IPA','Voodoo Ranger IPA','Goose Island IPA','Founders All Day IPA',
+  'Bell’s Two Hearted IPA','Dogfish Head 60 Minute IPA','Stone IPA','Firestone Walker 805','Fat Tire Amber Ale',
+  'Athletic Brewing Run Wild NA','White Claw','High Noon','Truly Hard Seltzer','Angry Orchard Cider','Austin Eastciders',
+  // wine styles
+  'Cabernet Sauvignon','Pinot Noir','Merlot','Malbec','Syrah','Shiraz','Zinfandel','Red Blend','Sangiovese',
+  'Tempranillo','Rioja','Chianti','Nebbiolo','Barbera','Grenache','Petite Sirah','Beaujolais','Lambrusco',
+  'Chardonnay','Sauvignon Blanc','Pinot Grigio','Riesling','Moscato','Albariño','Vinho Verde','Grüner Veltliner',
+  'Gewürztraminer','Viognier','Chenin Blanc','White Blend','Sancerre','Chablis','Orange Wine','Rosé',
+  'Sparkling Rosé','Prosecco','Champagne','Cava','Crémant','Port','Tawny Port','Sherry','Madeira','Sauternes',
+  // wine brands
+  'La Marca Prosecco','Mionetto Prosecco','Veuve Clicquot','Moët & Chandon','Dom Pérignon','Freixenet Cava',
+  'Kim Crawford Sauvignon Blanc','Oyster Bay Sauvignon Blanc','Cloudy Bay Sauvignon Blanc','Whitehaven Sauvignon Blanc',
+  'Josh Cellars Cabernet','Meiomi Pinot Noir','Caymus Cabernet','Apothic Red','19 Crimes Red Blend','Decoy Cabernet',
+  'Justin Cabernet','Bogle Cabernet','Duckhorn Merlot','Catena Malbec','Trivento Malbec','Campo Viejo Rioja',
+  'Ruffino Chianti','Banfi Chianti Classico','Santa Margherita Pinot Grigio','Ecco Domani Pinot Grigio',
+  'La Crema Chardonnay','Rombauer Chardonnay','Kendall-Jackson Chardonnay','Sonoma-Cutrer Chardonnay',
+  'Whispering Angel Rosé','Miraval Rosé','Stella Rosa','Roscato','Barefoot','Yellow Tail','Bota Box','Chandon Brut',
+];
 const UNITS = ['oz','ml','cup','gallon','dash','tsp','bsp','drop','leaf','wedge','pinch','rinse','top','whole'];
 const LEVELS = ['full','low','out'];
 
@@ -366,7 +392,7 @@ function seedRecipes(){
 
 /* ============================== state ============================== */
 let S = null;
-function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[] }; }
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[] }; }
 function load(){
   let raw = null;
   try{ raw = localStorage.getItem(KEY); }catch(e){}
@@ -389,6 +415,7 @@ function load(){
   if(typeof d.featureId !== 'string') d.featureId = null;
   if(typeof d.featureLabel !== 'string' || !d.featureLabel.trim()) d.featureLabel = 'drink of the night';
   if(!Array.isArray(d.beerWine)) d.beerWine = [];
+  if(!Array.isArray(d.customBW)) d.customBW = [];
   return d;
 }
 let _saveT = null;
@@ -572,6 +599,7 @@ function importJSON(text){
   if(typeof d.featureId !== 'string') d.featureId = null;
   if(typeof d.featureLabel !== 'string' || !d.featureLabel.trim()) d.featureLabel = 'drink of the night';
   if(!Array.isArray(d.beerWine)) d.beerWine = [];
+  if(!Array.isArray(d.customBW)) d.customBW = [];
   S = d; save(); renderAll(); return null;
 }
 function downloadBackup(){
@@ -1163,8 +1191,11 @@ function openMenuPicker(){
   const pRows = stockedPours.length ? stockedPours.map(b => ckRow('mp-pk', b.id, !S.pourSelection || S.pourSelection.includes(b.id),
     esc(b.name) + (b.subtype ? ' <span class="dim small">' + esc(b.subtype) + '</span>' : ''))).join('')
     : '<div class="dim small" style="padding:10px 2px">No spirits stocked yet.</div>';
-  const bwPane = '<div class="small mut" style="margin-bottom:6px">One per line — typed straight onto the menu, no inventory tracking.</div>' +
-    '<textarea id="mp-bw" rows="6" placeholder="Modelo Especial&#10;La Marca Prosecco&#10;Rioja Crianza">' + esc(S.beerWine.join('\n')) + '</textarea>';
+  const bwWork = S.beerWine.slice();
+  const bwPane = '<div class="small mut" style="margin-bottom:6px">Type to search the catalog, or add your own — new entries are remembered for next time.</div>' +
+    '<div class="sgwrap"><input id="mp-bwin" placeholder="Modelo, prosecco, Whispering Angel&hellip;" autocomplete="off"></div>' +
+    '<button class="abtn ghost" id="mp-bwadd" style="width:100%;margin-top:8px">+ Add to menu</button>' +
+    '<div id="mp-bwlist" style="margin-top:10px"></div>';
   const featPane = makeable.length
     ? '<div class="small mut" style="margin-bottom:6px">Optional — the chosen drink gets top billing under its own label.</div>' +
       '<select id="mp-feat"><option value="">— none —</option>' + makeable.map(r =>
@@ -1186,6 +1217,26 @@ function openMenuPicker(){
     document.querySelectorAll('#mp-tabs button').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('#modal .mp-pane').forEach(p => p.classList.toggle('hidden', p.dataset.p !== btn.dataset.p));
   });
+  const bwListEl = document.getElementById('mp-bwlist');
+  const renderBwList = () => {
+    bwListEl.innerHTML = bwWork.length ? bwWork.map((n,i) =>
+      '<div class="rowline" style="padding:6px 2px"><span class="grow">' + esc(n) + '</span>' +
+      '<button class="del bw-del" data-i="' + i + '">remove</button></div>').join('')
+      : '<div class="dim small" style="padding:8px 2px">Nothing listed yet.</div>';
+    bwListEl.querySelectorAll('.bw-del').forEach(b => b.addEventListener('click', () => { bwWork.splice(+b.dataset.i, 1); renderBwList(); }));
+  };
+  renderBwList();
+  const bwAdd = () => {
+    const inp = document.getElementById('mp-bwin');
+    const v = inp.value.trim().slice(0, 60);
+    if(!v){ toast('Type a beer or wine first.'); return; }
+    if(bwWork.some(x => norm(x) === norm(v))){ toast('Already on the list.'); return; }
+    if(bwWork.length >= 50){ toast('That’s plenty of beer and wine.'); return; }
+    bwWork.push(v); renderBwList();
+    inp.value = ''; hideSuggest(); inp.focus();
+  };
+  document.getElementById('mp-bwadd').addEventListener('click', bwAdd);
+  document.getElementById('mp-bwin').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); bwAdd(); } });
   document.getElementById('mp-all').onclick = () => {
     S.menuSelection = null; S.pourSelection = null;
     save(); closeModal(); renderMenu(); toast('Menu shows everything automatically.');
@@ -1206,8 +1257,10 @@ function openMenuPicker(){
       S.featureId = featSel.value || null;
       S.featureLabel = document.getElementById('mp-featlbl').value.trim() || 'drink of the night';
     }
-    const bw = document.getElementById('mp-bw');
-    if(bw) S.beerWine = bw.value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 50).map(s => s.slice(0, 60));
+    S.beerWine = bwWork.slice(0, 50);
+    // remember anything that isn't already in the catalog for future autocomplete
+    const known = new Set(BEERWINE_CATALOG.concat(S.customBW).map(norm));
+    for(const n of S.beerWine) if(!known.has(norm(n)) && S.customBW.length < 200) S.customBW.push(n);
     save(); closeModal(); renderMenu();
   };
 }
@@ -1242,6 +1295,7 @@ function subInput(cls, cat, val){
 let _sgPanel = null, _sgSuppress = false;
 function hideSuggest(){ if(_sgPanel){ _sgPanel.remove(); _sgPanel = null; } }
 function suggestOptionsFor(el){
+  if(el.id === 'mp-bwin') return S.customBW.concat(BEERWINE_CATALOG);
   if(el.classList.contains('ir-bottle')) return S.bottles.map(b => b.name).sort((a,z)=>a.localeCompare(z));
   if(el.classList.contains('ir-staple')) return S.staples.slice();
   if(el.classList.contains('ir-sub') || el.classList.contains('sr-sub') || el.classList.contains('bf-sub')){
