@@ -298,6 +298,24 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('mp-save').click(); await sleep(20);
   assert(w.eval('S.featureId')===null && d.querySelector('#menu-body .mitem.feature')===null, 'the feature is optional and switches off cleanly');
 
+  // tabbed picker + beer & wine
+  w.eval('openMenuPicker()'); await sleep(20);
+  assert(d.querySelectorAll('#mp-tabs button').length===4, 'menu picker has four tabs');
+  const bwTab = [...d.querySelectorAll('#mp-tabs button')].find(b=>b.textContent.includes('Beer'));
+  bwTab.click(); await sleep(20);
+  assert(!d.querySelector('#modal .mp-pane[data-p="2"]').classList.contains('hidden')
+      && d.querySelector('#modal .mp-pane[data-p="0"]').classList.contains('hidden'), 'tab switch shows the beer & wine pane');
+  d.getElementById('mp-bw').value = 'Modelo Especial\nLa Marca Prosecco\n';
+  d.getElementById('mp-save').click(); await sleep(20);
+  assert(w.eval('JSON.stringify(S.beerWine)')===JSON.stringify(['Modelo Especial','La Marca Prosecco']), 'beer & wine list saves from the textarea');
+  const bwNames = [...d.querySelectorAll('#menu-body .mitem.bw .mname')].map(e=>e.textContent);
+  assert(bwNames.length===2 && bwNames[0]==='Modelo Especial', 'beer & wine section renders on the menu');
+  const bwLink = w.eval('buildMenuLink()');
+  const bwPayload = JSON.parse(w.eval('JSON.stringify(parseMenuHash('+JSON.stringify('#m=')+' + '+JSON.stringify(bwLink.split('#m=')[1])+'))'));
+  assert(Array.isArray(bwPayload.b) && bwPayload.b.length===2, 'share payload carries beer & wine');
+  w.eval('S.beerWine=[]; save(); renderMenu();'); await sleep(20);
+  assert(d.querySelector('#menu-body .mitem.bw')===null, 'clearing the list removes the section');
+
   // 86'd: a drink whose bottle ran dry is struck through, not hidden
   w.eval('S.bottles.find(b=>b.name==="Sipsmith").level="out"; renderMenu();'); await sleep(20);
   const dead = [...d.querySelectorAll('#menu-body .mname.dead')].map(e=>e.textContent);
@@ -379,14 +397,20 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const brow = d.querySelector('#rf-ings .ingrow');
   brow.querySelector('.ir-kind').value = 'bottleId';
   brow.querySelector('.ir-kind').dispatchEvent(new w.Event('change')); await sleep(20);
-  const opts = [...brow.querySelectorAll('datalist option')].map(o=>o.value);
-  assert(opts.length===w.eval('S.bottles.length') && opts[0]==='Amaro Nonino Quintessentia', 'bottle picker is a sorted type-to-search list');
+  brow.querySelector('.ir-bottle').dispatchEvent(new w.Event('input',{bubbles:true})); await sleep(20);
+  let sgItems = [...d.querySelectorAll('#modal .suggest .sg-item')].map(e=>e.textContent);
+  assert(sgItems.length===w.eval('S.bottles.length') && sgItems[0]==='Amaro Nonino Quintessentia', 'bottle field pops sorted suggestions (custom, not datalist)');
   d.getElementById('rf-name').value = 'Bottle Test';
   brow.querySelector('.ir-qty').value = '2';
   brow.querySelector('.ir-bottle').value = 'nonexistent bottle';
   d.getElementById('rf-save').click(); await sleep(30);
   assert(!w.eval('S.recipes.some(r=>r.name==="Bottle Test")') && d.getElementById('modalwrap').classList.contains('on'), 'an unknown bottle name blocks the save with the form intact');
-  brow.querySelector('.ir-bottle').value = 'campari bitter';
+  brow.querySelector('.ir-bottle').value = 'campari';
+  brow.querySelector('.ir-bottle').dispatchEvent(new w.Event('input',{bubbles:true})); await sleep(20);
+  const sgHits = [...d.querySelectorAll('#modal .suggest .sg-item')];
+  assert(sgHits.length===1 && sgHits[0].textContent==='Campari Bitter', 'typing filters the suggestions');
+  sgHits[0].dispatchEvent(new w.Event('mousedown',{bubbles:true})); await sleep(20);
+  assert(brow.querySelector('.ir-bottle').value==='Campari Bitter', 'tapping a suggestion fills the field');
   d.getElementById('rf-save').click(); await sleep(30);
   const bt = 'S.recipes.find(r=>r.name==="Bottle Test")';
   assert(w.eval(bt+'.ingredients[0].req.bottleId')===w.eval('S.bottles.find(b=>b.name==="Campari Bitter").id'), 'a typed name resolves to the bottle id, case-insensitively');
@@ -406,16 +430,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert([...d.querySelectorAll('#rd-ings .qty')][0].textContent.trim()==='2.25 cup', 'fractional scaling rounds sensibly');
   w.eval('closeModal(); deleteRecipe(S.recipes.find(r=>r.name==="Batch Test").id); deleteRecipe(S.recipes.find(r=>r.name==="Bottle Test").id);');
 
-  // --- wishlist with photos ---
-  w.eval('setTab("tonight")');
-  assert(d.getElementById('wish-list')!==null && d.getElementById('btn-addwish')!==null, 'Tonight tab has a wishlist section');
+  // --- wishlist with photos (lives on the Shelf tab) ---
+  w.eval('setTab("shelf")');
+  assert(d.querySelector('#view-shelf #wish-list')!==null && d.querySelector('#view-shelf #btn-addwish')!==null, 'the wishlist lives on the Shelf tab');
   d.getElementById('btn-addwish').click(); await sleep(20);
   d.getElementById('wf-name').value = 'Chartreuse V.E.P.';
   d.getElementById('wf-notes').value = 'saw it at the shop downtown';
   d.getElementById('wf-save').click(); await sleep(30);
   assert(w.eval('S.wishlist.length')===1 && w.eval('S.wishlist[0].notes').includes('downtown'), 'wishlist add saves name + notes');
   assert([...d.querySelectorAll('#wish-list .wname')].some(e=>e.textContent==='Chartreuse V.E.P.'), 'wish renders on Tonight');
-  w.eval('S.wishlist[0].img="data:image/jpeg;base64,aGVsbG8="; save(); renderTonight();'); await sleep(20);
+  w.eval('S.wishlist[0].img="data:image/jpeg;base64,aGVsbG8="; save(); renderWishlist();'); await sleep(20);
   assert(d.querySelector('#wish-list img.wthumb')!==null, 'wish photo renders as a thumbnail');
   d.querySelector('#wish-list .wish').click(); await sleep(20);
   assert(d.getElementById('wf-name').value==='Chartreuse V.E.P.' && d.querySelector('#wf-photo img')!==null, 'tapping a wish opens it for editing with its photo');

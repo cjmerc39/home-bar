@@ -396,6 +396,9 @@ function cleanMenuPayload(p) {
     out.f = { label: String(p.f.label || 'drink of the night').slice(0, 60),
       n: String(p.f.n).slice(0, 80), d: String(p.f.d || '').slice(0, 300), h: !!p.f.h };
   }
+  if (Array.isArray(p.b) && p.b.length) {
+    out.b = p.b.slice(0, 50).map((x) => String(x || '').slice(0, 60)).filter(Boolean);
+  }
   return out;
 }
 function menuId() {

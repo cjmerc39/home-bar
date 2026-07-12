@@ -24,7 +24,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);padding-bottom:calc(120px + env(safe-area-inset-bottom))}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   background:radial-gradient(120% 90% at 50% 0%, rgba(255,220,160,.045), transparent 55%),
              radial-gradient(140% 120% at 50% 110%, rgba(0,0,0,.5), transparent 60%)}
@@ -110,6 +110,10 @@ body.menuMode{padding-bottom:0}
 .wph{width:54px;height:54px;border-radius:8px;border:1px dashed var(--brassdim);display:flex;align-items:center;justify-content:center;color:var(--brassdim);flex:none;font-size:20px}
 .wish{cursor:pointer}
 .wname{font-weight:600}
+.sgwrap{position:relative}
+.suggest{position:absolute;left:0;right:0;top:100%;margin-top:2px;z-index:60;background:var(--bg3);border:1px solid var(--brassdim);border-radius:9px;max-height:190px;overflow-y:auto;box-shadow:0 8px 22px rgba(0,0,0,.5)}
+.sg-item{padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.sg-item:last-child{border-bottom:0}
 .msec{display:flex;align-items:center;gap:14px;max-width:420px;margin:48px auto 24px;color:var(--brass2);font-family:var(--serif);font-size:14px;letter-spacing:4px;text-transform:uppercase}
 .msec::before,.msec::after{content:'';flex:1;border-top:1px solid var(--brassdim);opacity:.6}
 .aibox{background:var(--bg3);border:1px dashed var(--brassdim);border-radius:10px;padding:10px;margin:10px 0 2px}
@@ -182,6 +186,9 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
         <button class="abtn ghost" id="btn-add-empty">Add a bottle</button>
       </div>
     </div>
+    <h2 class="htitle">Wishlist</h2>
+    <div id="wish-list"></div>
+    <button class="abtn ghost" id="btn-addwish" style="width:100%;margin-top:6px">+ Add to wishlist</button>
   </section>
 
   <section id="view-specs" class="view">
@@ -203,9 +210,6 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
     <div id="unlock-list"></div>
     <h2 class="htitle">Shopping list</h2>
     <div id="shopping-list"></div>
-    <h2 class="htitle">Wishlist</h2>
-    <div id="wish-list"></div>
-    <button class="abtn ghost" id="btn-addwish" style="width:100%;margin-top:6px">+ Add to wishlist</button>
   </section>
 
   <section id="view-menu" class="view">
@@ -361,7 +365,7 @@ function seedRecipes(){
 
 /* ============================== state ============================== */
 let S = null;
-function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night' }; }
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[] }; }
 function load(){
   let raw = null;
   try{ raw = localStorage.getItem(KEY); }catch(e){}
@@ -383,6 +387,7 @@ function load(){
   if(!Array.isArray(d.pourSelection)) d.pourSelection = null;
   if(typeof d.featureId !== 'string') d.featureId = null;
   if(typeof d.featureLabel !== 'string' || !d.featureLabel.trim()) d.featureLabel = 'drink of the night';
+  if(!Array.isArray(d.beerWine)) d.beerWine = [];
   return d;
 }
 let _saveT = null;
@@ -565,6 +570,7 @@ function importJSON(text){
   if(!Array.isArray(d.pourSelection)) d.pourSelection = null;
   if(typeof d.featureId !== 'string') d.featureId = null;
   if(typeof d.featureLabel !== 'string' || !d.featureLabel.trim()) d.featureLabel = 'drink of the night';
+  if(!Array.isArray(d.beerWine)) d.beerWine = [];
   S = d; save(); renderAll(); return null;
 }
 function downloadBackup(){
@@ -875,6 +881,7 @@ function renderAll(){
   if(tab === 'menu') renderMenu();
 }
 function renderShelf(){
+  renderWishlist();
   const list = document.getElementById('shelf-list');
   const empty = document.getElementById('empty-shelf');
   document.getElementById('btn-scan').classList.toggle('hidden', !scanEnabled());
@@ -982,7 +989,8 @@ function renderTonight(){
   for(const b of S.bottles.filter(b => b.level === 'low')) shop.push('<div class="shopline"><span style="color:var(--low)">&#9679;</span><span>' + esc(b.name) + ' <span class="dim small">running low</span></span></div>');
   for(const b of S.bottles.filter(b => b.level === 'out')) shop.push('<div class="shopline"><span style="color:var(--out)">&#9679;</span><span>' + esc(b.name) + ' <span class="dim small">out</span></span></div>');
   document.getElementById('shopping-list').innerHTML = shop.length ? '<div class="card">' + shop.join('') + '</div>' : '<div class="card dim">Nothing needed. Impressive shelf.</div>';
-
+}
+function renderWishlist(){
   const wishEl = document.getElementById('wish-list');
   wishEl.innerHTML = S.wishlist.length ? S.wishlist.map(x =>
     '<div class="card wish rowline" data-id="' + x.id + '">' +
@@ -1030,6 +1038,7 @@ function menuPayload(){
     .sort((a,z) => POUR_CATS.indexOf(a.category) - POUR_CATS.indexOf(z.category) || a.name.localeCompare(z.name));
   const payload = { t: S.menuTitle, c, s: pours.map(b => ({ n:b.name, c:b.category, t:norm(b.subtype||'') })) };
   if(f) payload.f = f;
+  if(S.beerWine.length) payload.b = S.beerWine.slice(0, 50);
   return payload;
 }
 function renderMenu(){
@@ -1072,7 +1081,12 @@ function renderMenu(){
       }
     }
   }
-  if(sharedMenu && sharedMenuId && p.c.some(r => !r.x)){
+  const bw = Array.isArray(p.b) ? p.b : [];
+  if(bw.length){
+    html.push('<div class="msec">beer &amp; wine</div>');
+    for(const n of bw) html.push('<div class="mitem bw" data-n="', esc(String(n)), '"><div class="mname">', esc(String(n)), '</div></div>');
+  }
+  if(sharedMenu && sharedMenuId && (p.c.some(r => !r.x) || bw.length)){
     html.push('<div class="small dim" style="margin-top:34px">tap a drink to send a request to the bar</div>');
   }
   document.getElementById('menu-body').innerHTML = html.join('');
@@ -1135,25 +1149,38 @@ function openMenuPicker(){
   const makeable = S.recipes.filter(r => recipeStatus(r).makeable).sort((a,z)=>a.name.localeCompare(z.name));
   const stockedPours = S.bottles.filter(b => b.level !== 'out' && POUR_CATS.includes(b.category))
     .sort((a,z) => POUR_CATS.indexOf(a.category) - POUR_CATS.indexOf(z.category) || a.name.localeCompare(z.name));
-  if(!makeable.length && !stockedPours.length){ toast('Nothing is makeable yet — stock the shelf first.'); return; }
   const ckRow = (cls, id, on, label) =>
     '<label class="mp-row rowline" style="padding:7px 2px;gap:10px"><input type="checkbox" class="' + cls + '" data-id="' + id + '"' +
     (on ? ' checked' : '') + ' style="width:auto;transform:scale(1.2)"><span class="grow">' + label + '</span></label>';
-  const cRows = makeable.map(r => ckRow('mp-ck', r.id, !S.menuSelection || S.menuSelection.includes(r.id),
-    (r.house ? '<span class="housestar">★</span> ' : '') + esc(r.name))).join('');
-  const pRows = stockedPours.map(b => ckRow('mp-pk', b.id, !S.pourSelection || S.pourSelection.includes(b.id),
-    esc(b.name) + (b.subtype ? ' <span class="dim small">' + esc(b.subtype) + '</span>' : ''))).join('');
-  const featOpts = '<option value="">— none —</option>' + makeable.map(r =>
-    '<option value="' + r.id + '"' + (S.featureId === r.id ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('');
+  const cRows = makeable.length ? makeable.map(r => ckRow('mp-ck', r.id, !S.menuSelection || S.menuSelection.includes(r.id),
+    (r.house ? '<span class="housestar">★</span> ' : '') + esc(r.name))).join('')
+    : '<div class="dim small" style="padding:10px 2px">Nothing makeable yet — stock the shelf.</div>';
+  const pRows = stockedPours.length ? stockedPours.map(b => ckRow('mp-pk', b.id, !S.pourSelection || S.pourSelection.includes(b.id),
+    esc(b.name) + (b.subtype ? ' <span class="dim small">' + esc(b.subtype) + '</span>' : ''))).join('')
+    : '<div class="dim small" style="padding:10px 2px">No spirits stocked yet.</div>';
+  const bwPane = '<div class="small mut" style="margin-bottom:6px">One per line — typed straight onto the menu, no inventory tracking.</div>' +
+    '<textarea id="mp-bw" rows="6" placeholder="Modelo Especial&#10;La Marca Prosecco&#10;Rioja Crianza">' + esc(S.beerWine.join('\n')) + '</textarea>';
+  const featPane = makeable.length
+    ? '<div class="small mut" style="margin-bottom:6px">Optional — the chosen drink gets top billing under its own label.</div>' +
+      '<select id="mp-feat"><option value="">— none —</option>' + makeable.map(r =>
+        '<option value="' + r.id + '"' + (S.featureId === r.id ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('') + '</select>' +
+      '<input id="mp-featlbl" value="' + esc(S.featureLabel || 'drink of the night') + '" placeholder="drink of the night" style="margin-top:6px">'
+    : '<div class="dim small" style="padding:10px 2px">Feature a drink once something is makeable.</div>';
+  const tabs = ['Cocktails','Pours','Beer &amp; wine','Feature'];
   openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>On tonight&rsquo;s menu</h2>' +
-    '<div class="small mut" style="margin-bottom:8px">Untick anything you&rsquo;d rather not offer. With no saved selection, everything appears automatically.</div>' +
-    (cRows ? '<div class="fieldlbl">Cocktails</div>' + cRows : '') +
-    (pRows ? '<div class="fieldlbl">By the pour</div>' + pRows : '') +
-    (makeable.length ? '<div class="fieldlbl">Tonight&rsquo;s feature <span class="dim">(optional — gets top billing)</span></div>' +
-      '<select id="mp-feat">' + featOpts + '</select>' +
-      '<input id="mp-featlbl" value="' + esc(S.featureLabel || 'drink of the night') + '" placeholder="drink of the night" style="margin-top:6px">' : '') +
+    '<div class="seg" id="mp-tabs" style="margin:10px 0">' + tabs.map((t,i) =>
+      '<button data-p="' + i + '"' + (i===0?' class="on"':'') + '>' + t + '</button>').join('') + '</div>' +
+    '<div class="mp-pane" data-p="0"><div class="small mut" style="margin-bottom:6px">Untick anything you&rsquo;d rather not offer; all ticked = automatic.</div>' + cRows + '</div>' +
+    '<div class="mp-pane hidden" data-p="1"><div class="small mut" style="margin-bottom:6px">Untick bottles to keep them off the by-the-pour list.</div>' + pRows + '</div>' +
+    '<div class="mp-pane hidden" data-p="2">' + bwPane + '</div>' +
+    '<div class="mp-pane hidden" data-p="3">' + featPane + '</div>' +
     '<div style="display:flex;gap:8px;margin-top:14px"><button class="abtn ghost" id="mp-all">Show everything</button>' +
-    '<button class="abtn" id="mp-save" style="flex:1">Save selection</button></div>');
+    '<button class="abtn" id="mp-save" style="flex:1">Save</button></div>');
+  document.getElementById('mp-tabs').addEventListener('click', e => {
+    const btn = e.target.closest('button'); if(!btn) return;
+    document.querySelectorAll('#mp-tabs button').forEach(b => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('#modal .mp-pane').forEach(p => p.classList.toggle('hidden', p.dataset.p !== btn.dataset.p));
+  });
   document.getElementById('mp-all').onclick = () => {
     S.menuSelection = null; S.pourSelection = null;
     save(); closeModal(); renderMenu(); toast('Menu shows everything automatically.');
@@ -1174,6 +1201,8 @@ function openMenuPicker(){
       S.featureId = featSel.value || null;
       S.featureLabel = document.getElementById('mp-featlbl').value.trim() || 'drink of the night';
     }
+    const bw = document.getElementById('mp-bw');
+    if(bw) S.beerWine = bw.value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 50).map(s => s.slice(0, 60));
     save(); closeModal(); renderMenu();
   };
 }
@@ -1202,10 +1231,50 @@ function catSelect(cls, val){
   return '<select class="' + cls + '">' + CATEGORIES.map(c => '<option' + (c===val?' selected':'') + '>' + c + '</option>').join('') + '</select>';
 }
 function subInput(cls, cat, val){
-  const listId = 'dl-' + cls + '-' + Math.random().toString(36).slice(2,7);
-  return '<span style="flex:1"><input class="' + cls + '" list="' + listId + '" placeholder="subtype" value="' + esc(val||'') + '">' +
-    '<datalist id="' + listId + '">' + (SUBTYPES[cat]||[]).map(s => '<option value="' + esc(s) + '">').join('') + '</datalist></span>';
+  return '<span class="sgwrap" style="flex:1"><input class="' + cls + '" placeholder="subtype" value="' + esc(val||'') + '" autocomplete="off"></span>';
 }
+/* custom suggestion dropdown — iOS Safari ignores <datalist>, so we roll our own */
+let _sgPanel = null, _sgSuppress = false;
+function hideSuggest(){ if(_sgPanel){ _sgPanel.remove(); _sgPanel = null; } }
+function suggestOptionsFor(el){
+  if(el.classList.contains('ir-bottle')) return S.bottles.map(b => b.name).sort((a,z)=>a.localeCompare(z));
+  if(el.classList.contains('ir-staple')) return S.staples.slice();
+  if(el.classList.contains('ir-sub') || el.classList.contains('sr-sub') || el.classList.contains('bf-sub')){
+    let cat = null;
+    if(el.classList.contains('bf-sub')){ const c = document.querySelector('#modal .bf-cat'); cat = c && c.value; }
+    else { const row = el.closest('.formrow'); const c = row && row.querySelector('select.ir-cat, select.sr-cat'); cat = c && c.value; }
+    return (SUBTYPES[cat] || []).slice();
+  }
+  return null;
+}
+function showSuggest(el){
+  const all = suggestOptionsFor(el);
+  hideSuggest();
+  if(!all || !all.length) return;
+  const q = norm(el.value);
+  const opts = all.filter(o => !q || norm(o).includes(q)).slice(0, 10);
+  if(!opts.length || (opts.length === 1 && norm(opts[0]) === q)) return;
+  const wrap = el.closest('.sgwrap'); if(!wrap) return;
+  _sgPanel = document.createElement('div');
+  _sgPanel.className = 'suggest';
+  for(const o of opts){
+    const it = document.createElement('div');
+    it.className = 'sg-item'; it.textContent = o;
+    it.addEventListener('mousedown', e => {
+      e.preventDefault();
+      _sgSuppress = true;
+      el.value = o;
+      el.dispatchEvent(new Event('input', { bubbles:true }));
+      _sgSuppress = false;
+      hideSuggest();
+    });
+    _sgPanel.appendChild(it);
+  }
+  wrap.appendChild(_sgPanel);
+}
+document.addEventListener('focusin', e => { if(e.target instanceof HTMLInputElement && !_sgSuppress) showSuggest(e.target); });
+document.addEventListener('input', e => { if(e.target instanceof HTMLInputElement && !_sgSuppress) showSuggest(e.target); });
+document.addEventListener('focusout', () => setTimeout(hideSuggest, 150));
 function lvlSelect(cls, val){
   return '<select class="' + cls + '">' + LEVELS.map(l => '<option' + (l===val?' selected':'') + '>' + l + '</option>').join('') + '</select>';
 }
@@ -1308,18 +1377,12 @@ function ingBodyHtml(kind, req, cat){
   if(kind === 'staple'){
     // free-type: seasonal/household ingredients don't have to live in the staples list
     const v = req.staple || '';
-    const listId = 'dl-st-' + Math.random().toString(36).slice(2,7);
-    return '<span style="flex:1"><input class="ir-staple" list="' + listId + '" placeholder="lime, cinnamon, condensed milk…" value="' + esc(v) + '">' +
-      '<datalist id="' + listId + '">' + S.staples.map(s => '<option value="' + esc(s) + '">').join('') + '</datalist></span>';
+    return '<span class="sgwrap" style="flex:1"><input class="ir-staple" placeholder="lime, cinnamon, condensed milk…" value="' + esc(v) + '" autocomplete="off"></span>';
   }
   if(kind === 'bottleId'){
     if(!S.bottles.length) return '<div class="dim small" style="padding:8px 2px">No bottles on the shelf yet.</div>';
-    // type-to-search with sorted suggestions, not a raw dropdown
     const cur = req.bottleId ? ((S.bottles.find(b => b.id === req.bottleId) || {}).name || '') : '';
-    const listId = 'dl-bt-' + Math.random().toString(36).slice(2,7);
-    return '<span style="flex:1"><input class="ir-bottle" list="' + listId + '" placeholder="start typing a bottle…" value="' + esc(cur) + '">' +
-      '<datalist id="' + listId + '">' + S.bottles.slice().sort((a,z)=>a.name.localeCompare(z.name))
-        .map(b => '<option value="' + esc(b.name) + '">').join('') + '</datalist></span>';
+    return '<span class="sgwrap" style="flex:1"><input class="ir-bottle" placeholder="start typing a bottle…" value="' + esc(cur) + '" autocomplete="off"></span>';
   }
   return catSelect('ir-cat', cat) + subInput('ir-sub', cat, req.tag && req.tag.subtype || '');
 }
