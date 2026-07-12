@@ -37,7 +37,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 input,select,textarea{font:inherit;color:var(--ink);background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
 input:focus,select:focus,textarea:focus{outline:1px solid var(--brassdim)}
 ::placeholder{color:var(--dim)}
-main{position:relative;z-index:1;width:100%;max-width:640px;margin:0 auto;padding:0 14px calc(48px + env(safe-area-inset-bottom));flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+main{position:relative;z-index:1;width:100%;max-width:640px;margin:0 auto;padding:0 14px 16px;flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 /* top bar */
 #topbar{flex:none;width:100%;max-width:640px;margin:0 auto;background:var(--bg);padding:calc(14px + env(safe-area-inset-top)) 14px 10px;display:flex;align-items:baseline;gap:10px}
 #topbar h1{font-size:26px;letter-spacing:.5px;color:var(--brass2);font-weight:700}
@@ -103,7 +103,7 @@ body.menuMode #tabbar,body.menuMode #topbar{display:none}
 .unlock .buy{color:var(--brass2);font-weight:600}
 .shopline{display:flex;gap:8px;align-items:baseline}
 /* menu */
-#view-menu{padding:34px 8px 60px;text-align:center}
+#view-menu{padding:34px 8px calc(60px + env(safe-area-inset-bottom));text-align:center}
 #menu-exit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;color:var(--dim);font-size:20px;z-index:7;padding:8px}
 #menu-share{position:fixed;top:calc(12px + env(safe-area-inset-top));left:12px;color:var(--dim);font-size:16px;z-index:7;padding:8px}
 #menu-curate{position:fixed;top:calc(12px + env(safe-area-inset-top));left:52px;color:var(--dim);font-size:16px;z-index:7;padding:8px}
