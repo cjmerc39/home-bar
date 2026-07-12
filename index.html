@@ -528,8 +528,13 @@ function deleteRecipe(id){ S.recipes = S.recipes.filter(r => r.id !== id); save(
 function recipeBase(r){
   let first = null;
   for(const ing of r.ingredients){
-    if(!ing.req.tag) continue;
-    const c = norm(ing.req.tag.category);
+    let c = null;
+    if(ing.req.tag) c = norm(ing.req.tag.category);
+    else if(ing.req.bottleId){ // a specific bottle counts as its category
+      const b = S.bottles.find(x => x.id === ing.req.bottleId);
+      if(b) c = norm(b.category);
+    }
+    if(!c) continue;
     if(first === null) first = c;
     if(SPIRITS.includes(c)) return c; // a real spirit wins over a leading liqueur/wine
   }
@@ -775,13 +780,32 @@ async function requestRecipe(payload){
   if(!r.ok || !j || j.error || !j.recipe) throw new Error((j && j.error) || ('draft failed: ' + r.status));
   return j.recipe;
 }
+// spirits sometimes arrive from the AI filed as staples or category "other" —
+// rescue them into their real category by word match (token-exact, so "ginger" ≠ gin)
+const SPIRIT_TOKENS = {
+  gin:{category:'gin'}, vodka:{category:'vodka'}, tequila:{category:'tequila'}, mezcal:{category:'mezcal'},
+  rum:{category:'rum'}, brandy:{category:'brandy'}, cognac:{category:'brandy',subtype:'cognac'},
+  whiskey:{category:'whiskey'}, whisky:{category:'whiskey'},
+  bourbon:{category:'whiskey',subtype:'bourbon'}, scotch:{category:'whiskey',subtype:'scotch'}, rye:{category:'whiskey',subtype:'rye'},
+};
+function spiritFromText(s){
+  for(const tok of norm(s||'').split(/[^a-z]+/)){ if(SPIRIT_TOKENS[tok]) return SPIRIT_TOKENS[tok]; }
+  return null;
+}
+function spiritTag(sp){ return sp.subtype ? { tag:{ category:sp.category, subtype:sp.subtype } } : { tag:{ category:sp.category } }; }
 // worker returns flat ingredients (kind/category/subtype/staple); convert to app req shape
 function convertAiRecipe(rec){
   const ings = [];
   for(const i of (rec.ingredients || [])){
     let req = null;
-    if(i.kind === 'staple' && i.staple) req = { staple: norm(i.staple) };
-    else if(norm(i.category||'') === 'other' && norm(i.subtype||'')) req = { staple: norm(i.subtype) }; // pantry stuff mislabelled as a bottle
+    if(i.kind === 'staple' && i.staple){
+      const sp = spiritFromText(i.staple);
+      req = sp ? spiritTag(sp) : { staple: norm(i.staple) };
+    }
+    else if(norm(i.category||'') === 'other' && norm(i.subtype||'')){ // mislabelled as a generic bottle
+      const sp = spiritFromText(i.subtype);
+      req = sp ? spiritTag(sp) : { staple: norm(i.subtype) };
+    }
     else if(i.category && CATEGORIES.includes(norm(i.category)))
       req = norm(i.subtype||'') ? { tag:{ category:norm(i.category), subtype:norm(i.subtype) } } : { tag:{ category:norm(i.category) } };
     if(!req) continue;

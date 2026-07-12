@@ -449,6 +449,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('rf-save').click(); await sleep(30);
   const bt = 'S.recipes.find(r=>r.name==="Bottle Test")';
   assert(w.eval(bt+'.ingredients[0].req.bottleId')===w.eval('S.bottles.find(b=>b.name==="Campari Bitter").id'), 'a typed name resolves to the bottle id, case-insensitively');
+  assert(w.eval('recipeBase('+bt+')')==='amaro', 'a specific-bottle ingredient counts as its bottle category for the base');
+  assert(w.eval('recipeBase({ingredients:[{req:{bottleId:S.bottles.find(b=>b.name==="Sipsmith").id}},{req:{staple:"lemon"}}]})')==='gin',
+    'a bottle-specific gin makes the recipe a gin drink, not "other"');
+  const resc = JSON.parse(w.eval('JSON.stringify(convertAiRecipe({name:"X",method:"build",ingredients:[' +
+    '{kind:"staple",staple:"gin",qty:"1.5",unit:"oz"},' +
+    '{kind:"tag",category:"other",subtype:"bourbon",qty:"2",unit:"oz"},' +
+    '{kind:"staple",staple:"ginger",qty:"1",unit:"oz"}]}).ingredients)'));
+  assert(resc[0].req.tag && resc[0].req.tag.category==='gin', 'AI spirits filed as staples get rescued into real categories');
+  assert(resc[1].req.tag && resc[1].req.tag.category==='whiskey' && resc[1].req.tag.subtype==='bourbon', 'other/bourbon rescues to whiskey');
+  assert(resc[2].req.staple==='ginger', 'ginger stays a staple — no false gin match');
 
   // --- servings + portion scaling ---
   assert(w.eval('UNITS.includes("cup") && UNITS.includes("gallon")'), 'cup and gallon are valid units');

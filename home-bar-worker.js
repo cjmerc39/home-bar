@@ -201,7 +201,8 @@ function recipePrompt(staples) {
     'category "milk" and the milk name as the subtype. Any other household ingredient (citrus, syrup, eggs, coffee, mint) ' +
     'is kind:"staple" with a short lowercase name — use the exact string from this list when one matches: [' +
     staples.join(', ') + '], otherwise a sensible short name. ' +
-    'Never use category "other" for pantry items. ' +
+    'Never use category "other" for pantry items. Alcoholic spirits are NEVER staples and never category "other" — ' +
+    'a brand implies its spirit (NOLET’S or Tanqueray = gin; Tito’s = vodka; Maker’s Mark = whiskey subtype bourbon). ' +
     'Everything alcoholic or bottled from a store is kind:"tag" with a category from the allowed list and, ' +
     'when meaningful, a lowercase subtype following these conventions: ' + SUBTYPE_CONVENTIONS + ' ' +
     'qty is a plain decimal string like "0.75". Keep glass and garnish short. Put technique tips in notes. ' +
