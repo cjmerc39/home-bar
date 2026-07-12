@@ -23,12 +23,12 @@
   --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%}
-/* app-shell layout: header + scrolling main + tab bar as flex rows.
-   Only <main> scrolls — iOS standalone jitters fixed-position bars when the
-   whole page scrolls, and miscounts the scrollable height (bottom cut-off). */
-body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);height:100%;display:flex;flex-direction:column;overflow:hidden}
-@supports (height:100dvh){body{height:100dvh}}
+/* html painted walnut so iOS standalone letterboxing never shows black bands */
+html{height:100%;background:var(--bg)}
+/* app-shell layout: header + scrolling main + tab bar as flex rows; only
+   <main> scrolls. body is pinned to the real screen edges (position:fixed)
+   because iOS standalone under-reports 100%/100dvh heights at launch. */
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   background:radial-gradient(120% 90% at 50% 0%, rgba(255,220,160,.045), transparent 55%),
              radial-gradient(140% 120% at 50% 110%, rgba(0,0,0,.5), transparent 60%)}
