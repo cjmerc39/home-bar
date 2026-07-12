@@ -1050,6 +1050,63 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('importJSON('+JSON.stringify(JSON.stringify(themeBackup))+')')===null, 'a backup with a bogus theme imports');
   assert(w.eval('S.menuTheme')==='golden', 'and falls back to golden');
 
+  // ================= sipping bottles: steer, never block =================
+  w.eval('upsertBottle({name:"Pappy 15", category:"whiskey", subtype:"bourbon", level:"full", sip:true})');
+  assert(w.eval('pourPick({tag:{category:"whiskey",subtype:"bourbon"}}).bottle.name')==='Eagle Rare', 'pour pick steers to the everyday bourbon');
+  assert(w.eval('pourPick({tag:{category:"whiskey",subtype:"bourbon"}}).sipOnly')===false, 'not sip-only while an everyday bottle stands');
+  w.eval('S.bottles.find(b=>b.name==="Eagle Rare").level="low"; save();');
+  assert(w.eval('pourPick({tag:{category:"whiskey",subtype:"bourbon"}}).bottle.name')==='Eagle Rare', 'even a low everyday bottle beats the good stuff');
+  w.eval('S.bottles.find(b=>b.name==="Eagle Rare").level="out"; save();');
+  const sipPick = JSON.parse(w.eval('JSON.stringify(pourPick({tag:{category:"whiskey",subtype:"bourbon"}}))'));
+  assert(sipPick.bottle.name==='Pappy 15' && sipPick.sipOnly===true, 'only the good bottle left: picked, and flagged honestly');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.id==="r03")).makeable')===true, 'a sipping bottle never blocks a drink');
+  w.eval('openRecipeDetail("r03")'); await sleep(20); // Whiskey Sour, bourbon-gated
+  assert(/only the good stuff matches/.test(d.getElementById('modal').textContent) && /Pappy 15/.test(d.getElementById('modal').textContent),
+    'the detail says it straight when only the good bottle fits');
+  w.eval('closeModal(); setTab("tonight");'); await sleep(20);
+  const wsRow = [...d.querySelectorAll('#makeable-list .tonight-item')].find(el=>el.textContent.includes('Whiskey Sour'));
+  assert(wsRow && wsRow.querySelector('.goodtag')!==null, 'Tonight quietly notes the good bottle');
+  w.eval('S.bottles.find(b=>b.name==="Eagle Rare").level="full"; save(); renderAll();'); await sleep(20);
+  w.eval('openRecipeDetail("r03")'); await sleep(20);
+  assert(/pour the/.test(d.getElementById('modal').textContent) && /Eagle Rare/.test(d.getElementById('modal').textContent),
+    'with the everyday bottle back, the line reads → pour the Eagle Rare');
+  w.eval('closeModal(); setTab("tonight");'); await sleep(20);
+  const wsRow2 = [...d.querySelectorAll('#makeable-list .tonight-item')].find(el=>el.textContent.includes('Whiskey Sour'));
+  assert(wsRow2 && wsRow2.querySelector('.goodtag')===null, 'the tag clears when an everyday bottle covers it');
+  // shelf marks, both views
+  w.eval('setTab("shelf")'); await sleep(20);
+  const pappyRow = [...d.querySelectorAll('#shelf-list .bottle')].find(el=>el.textContent.includes('Pappy 15'));
+  assert(pappyRow && pappyRow.querySelector('.sipmark')!==null, 'the list row wears the ✦');
+  d.getElementById('btn-shelfview').click(); await sleep(30);
+  const pappyId = w.eval('S.bottles.find(b=>b.name==="Pappy 15").id');
+  assert(d.querySelector('.bar-bottle[data-id="'+pappyId+'"] .bar-sip')!==null, 'so does the bar-view silhouette');
+  d.getElementById('btn-shelfview').click(); await sleep(20);
+  // the form toggle round-trips, and an ordinary edit preserves the flag
+  w.eval('openBottleForm("'+pappyId+'")'); await sleep(20);
+  assert(d.getElementById('bf-sip').checked===true, 'the edit form shows the flag');
+  d.getElementById('bf-save').click(); await sleep(20);
+  assert(w.eval('S.bottles.find(b=>b.name==="Pappy 15").sip')===true, 'an ordinary edit keeps it');
+  w.eval('openBottleForm("'+pappyId+'")'); await sleep(20);
+  d.getElementById('bf-sip').checked = false;
+  d.getElementById('bf-save').click(); await sleep(20);
+  assert(w.eval('S.bottles.find(b=>b.name==="Pappy 15").sip')===undefined, 'unticking clears it');
+  w.eval('S.bottles.find(b=>b.name==="Pappy 15").sip=true; save();');
+  // pour-list synergy: sipping bottles lead their category, starred in the picker
+  w.eval('setTab("menu")'); await sleep(30);
+  const whiskeyPours = JSON.parse(w.eval('JSON.stringify(menuPayload().s.filter(x=>x.c==="whiskey").map(x=>x.n))'));
+  assert(whiskeyPours[0]==='Pappy 15', 'sipping bottles lead their category on the pour list');
+  assert(JSON.parse(w.eval('JSON.stringify(menuPayload())')).s.every(x=>Object.keys(x).every(k=>['n','c','t'].includes(k))), 'the sip flag itself stays host-side');
+  w.eval('openMenuPicker()'); await sleep(20);
+  const pappyPk = [...d.querySelectorAll('#modal .mp-pk')].find(el=>el.closest('label').textContent.includes('Pappy 15'));
+  assert(pappyPk && pappyPk.closest('label').querySelector('.sipmark')!==null, 'the picker stars the sipping bottle');
+  w.eval('closeModal(); setTab("shelf");'); await sleep(20);
+  // survives a backup round-trip
+  const sipBackup = w.eval('exportJSON()');
+  w.eval('localStorage.clear(); S=fresh(); renderAll();');
+  assert(w.eval('importJSON('+JSON.stringify(sipBackup)+')')===null, 'backup with sip flags imports');
+  assert(w.eval('S.bottles.find(b=>b.name==="Pappy 15").sip')===true, 'the flag survives export → wipe → import');
+  w.eval('deleteBottle(S.bottles.find(b=>b.name==="Pappy 15").id)'); await sleep(20);
+
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
 
