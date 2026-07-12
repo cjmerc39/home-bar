@@ -5,6 +5,7 @@ const errors = [];
 const dom = new JSDOM(html, {
   runScripts: 'dangerously', url: 'https://example.com/',
   beforeParse(w){ w.TextEncoder=TextEncoder; w.TextDecoder=TextDecoder; w.confirm=()=>true; w.scrollTo=()=>{};
+    try{ w.Object.defineProperty(w.Document.prototype, 'visibilityState', { configurable:true, get:()=> 'visible' }); }catch(e){}
     w.fetch = async (url, opts) => {
       const u = String(url);
       if(u.includes('/scan')) return { ok:true, status:200, json: async () => (w.__scanResult || { bottles: [] }) };
@@ -14,6 +15,7 @@ const dom = new JSDOM(html, {
         if(opts && opts.method==='PUT'){
           w.__syncStore = w.__syncStore || {};
           w.__syncStore[tok] = opts.body;
+          w.__syncPuts = (w.__syncPuts||0) + 1;
           return { ok:true, status:200, json: async()=>({ok:true}), text: async()=>'{"ok":true}' };
         }
         const v = (w.__syncStore||{})[tok];
@@ -22,15 +24,26 @@ const dom = new JSDOM(html, {
       }
       if(u.includes('/bartender')) return { ok:true, status:200, json: async () => (w.__bartenderResult || { picks: [] }) };
       if(u.includes('/req')){
+        const auth = String((opts&&opts.headers&&(opts.headers.Authorization||opts.headers.authorization))||'');
         if(opts && opts.method === 'POST'){ w.__reqStore = w.__reqStore || []; w.__reqStore.push(JSON.parse(opts.body)); return { ok:true, status:200, json: async () => ({ ok:true, count:w.__reqStore.length }) }; }
+        w.__lastReqAuth = auth;
         if(opts && opts.method === 'DELETE'){ w.__reqStore = []; return { ok:true, status:200, json: async () => ({ ok:true }) }; }
         return { ok:true, status:200, json: async () => ({ requests: (w.__reqStore||[]).map((x,i) => ({ d:x.drink, g:x.guest, at:1700000000000+i })) }) };
       }
       if(u.includes('/menu')){
         if(opts && opts.method === 'POST'){
           if(w.__menuPostFail) return { ok:false, status:500, json: async () => ({ error:'kv down' }) };
-          return { ok:true, status:200, json: async () => ({ id:'abc123' }) };
+          w.__menuPosts = (w.__menuPosts||0) + 1;
+          return { ok:true, status:200, json: async () => ({ id:'abc123', owner:'a'.repeat(32) }) };
         }
+        if(opts && opts.method === 'PUT'){
+          w.__menuPuts = w.__menuPuts || [];
+          w.__menuPuts.push({ url:u, auth:String((opts.headers&&(opts.headers.Authorization||opts.headers.authorization))||''), body:opts.body });
+          if(w.__menuPutStatus) return { ok:false, status:w.__menuPutStatus, json: async () => ({ error:'x' }) };
+          return { ok:true, status:200, json: async () => ({ ok:true }) };
+        }
+        if(opts && opts.method === 'DELETE'){ w.__menuDeleted = u; return { ok:true, status:200, json: async () => ({ ok:true }) }; }
+        if(w.__menuGetGone) return { ok:false, status:404, json: async () => ({ error:'menu expired' }) };
         return { ok:true, status:200, json: async () => (w.__sharedPayload || { t:'X', c:[], s:[] }) };
       }
       return { ok:false, status:404, json: async () => ({ error:'not found' }) };
@@ -159,6 +172,24 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   whead.click(); await sleep(30);
   assert(!w.eval('S.collapsedCats.includes("whiskey")') && [...d.querySelectorAll('#shelf-list .bname')].some(e=>e.textContent==='Eagle Rare'), 'tapping again expands the group');
 
+  // --- delete with Undo (replaces the confirm) ---
+  const delName = 'Fever-Tree Ginger Beer';
+  const preIdx = w.eval('S.bottles.findIndex(b=>b.name==="'+delName+'")');
+  const preCount = w.eval('S.bottles.length');
+  w.eval('deleteBottle(S.bottles.find(b=>b.name==="'+delName+'").id)'); await sleep(20);
+  assert(w.eval('S.bottles.length')===preCount-1, 'delete removes the bottle immediately');
+  let undoBtn = d.querySelector('#toast .tact');
+  assert(!!undoBtn && /Undo/.test(undoBtn.textContent), 'an Undo toast appears');
+  undoBtn.click(); await sleep(20);
+  assert(w.eval('S.bottles.length')===preCount && w.eval('S.bottles.findIndex(b=>b.name==="'+delName+'")')===preIdx, 'Undo restores the bottle at its original index');
+  w.eval('deleteBottle(S.bottles.find(b=>b.name==="'+delName+'").id)'); await sleep(20);
+  assert(w.eval('S.bottles.length')===preCount-1, 'without tapping Undo the delete stands');
+  d.querySelector('#toast .tact').click(); await sleep(20); // restore for the tests downstream
+  // bottle notes surface on the shelf (admin only)
+  w.eval('S.bottles.find(b=>b.name==="'+delName+'").notes="Kerrin gave me this one"; save(); renderShelf();'); await sleep(20);
+  assert([...d.querySelectorAll('#shelf-list .bnote')].some(e=>e.textContent==='Kerrin gave me this one'), 'bottle notes render on the shelf row');
+  w.eval('S.bottles.find(b=>b.name==="'+delName+'").notes=""; save();');
+
   // --- recipe CRUD via UI form ---
   w.eval('setTab("specs")');
   const specCount = d.querySelectorAll('#spec-list .rcard').length;
@@ -181,6 +212,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('openRecipeDetail("'+coqId+'")'); await sleep(20);
   d.getElementById('rd-del').click(); await sleep(30);
   assert(w.eval('S.recipes.length')===34, 'recipe delete removes it');
+
+  // --- restore missing classics ---
+  w.eval('S.recipes.find(r=>r.id==="r01").name = "Old Fashioned (CJ cut)"; save();');
+  w.eval('deleteRecipe("r17")'); await sleep(20); // Mai Tai, recoverable
+  assert(!w.eval('S.recipes.some(r=>r.id==="r17")'), 'a deleted classic is really gone');
+  w.eval('openSettings()'); await sleep(20);
+  d.getElementById('st-classics').click(); await sleep(20);
+  assert(w.eval('S.recipes.some(r=>r.id==="r17" && r.name==="Mai Tai")'), 'restore-missing-classics brings back only the absent id');
+  assert(w.eval('S.recipes.find(r=>r.id==="r01").name')==='Old Fashioned (CJ cut)', 'an edited seed recipe is never overwritten');
+  d.getElementById('st-classics').click(); await sleep(20);
+  assert(w.eval('S.recipes.length')===34, 'a second run adds nothing');
+  w.eval('closeModal(); S.recipes.find(r=>r.id==="r01").name="Old Fashioned"; save();'); await sleep(20);
 
   // --- specs search: by name and by ingredient (reverse lookup) ---
   d.getElementById('spec-search').value = 'campari';
@@ -238,22 +281,42 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(payload && payload.t===w.eval('S.menuTitle') && payload.c.length===menuNames.length && payload.s.length===5, 'share payload round-trips title, cocktails, and pours');
   assert(w.eval('parseMenuHash("#m=!!!notvalid")')===null && w.eval('parseMenuHash("#nope")')===null, 'garbage share hashes are rejected');
 
-  // short link via the worker (KV-backed)
-  const shortUrl = await w.createMenuLink();
-  assert(shortUrl.endsWith('/m/abc123'), 'worker returns a short /m/ link');
-  assert((await w.createMenuLink())===shortUrl, 'short link is cached while the menu is unchanged');
-  w.eval('_menuLink={key:null,url:null}');
-  w.__menuPostFail = true;
-  assert((await w.createMenuLink()).includes('#m='), 'worker outage falls back to the long link');
-  w.__menuPostFail = false;
-  w.eval('_menuLink={key:null,url:null}');
+  // stable short link: one id per bar, POST once, PUT in place on change
+  w.__menuPosts = 0; w.__menuPuts = [];
+  w.eval('S.menuId=null; S.menuOwner=null; _menuPush={key:null,url:null};');
+  const u1 = await w.ensureMenuLink();
+  assert(u1.endsWith('/m/abc123') && w.__menuPosts===1 && w.eval('S.menuId')==='abc123' && /^a{32}$/.test(w.eval('S.menuOwner')),
+    'first share POSTs once and stores the id + owner in S');
+  assert((await w.ensureMenuLink())===u1 && w.__menuPosts===1 && w.__menuPuts.length===0, 'unchanged payload costs zero requests');
+  w.eval('S.beerWine=["Stable Link Ale"];');
+  const u3 = await w.ensureMenuLink();
+  assert(u3===u1 && w.__menuPosts===1 && w.__menuPuts.length===1
+      && w.__menuPuts[0].url.endsWith('/menu/abc123') && w.__menuPuts[0].auth==='Bearer ' + 'a'.repeat(32),
+    'a payload change PUTs to the SAME id with the owner token — never a new POST');
+  w.eval('S.beerWine=[];'); await w.ensureMenuLink();
+  w.__menuPutStatus = 500; w.__menuPostFail = true;
+  w.eval('S.beerWine=["Offline Beer"];');
+  assert((await w.ensureMenuLink()).includes('#m=') && w.eval('S.menuId')==='abc123', 'worker outage falls back to the long link without losing the id');
+  w.__menuPutStatus = 0; w.__menuPostFail = false;
+  w.eval('S.beerWine=[];'); await w.ensureMenuLink();
+
   w.__sharedPayload = { t:"Party at CJ's", c:[{ n:'Negroni', d:'gin, Campari, sweet vermouth', h:true }], s:[] };
   await w.loadSharedMenu('abc123'); await sleep(20);
   assert(d.body.classList.contains('menuMode') && d.querySelector('#menu-body .menu-head').textContent==="Party at CJ's",
     'a short link loads the shared menu from the worker');
   assert(d.getElementById('menu-share').classList.contains('hidden') && d.getElementById('menu-curate').classList.contains('hidden'),
     'guest view from a short link hides admin chrome');
-  w.eval('sharedMenu=null; renderMenu();'); await sleep(20);
+
+  // guest live refetch: 86'd bottles reach phones that already loaded the menu
+  w.__sharedPayload = { t:'Party v2', c:[{ n:'Negroni', d:'ran dry', h:true, x:true }], s:[] };
+  d.dispatchEvent(new w.Event('visibilitychange')); await sleep(60);
+  assert(d.querySelector('#menu-body .menu-head').textContent==='Party v2' && d.querySelector('#menu-body .mname.dead')!==null,
+    'a visibility refresh re-renders the changed payload — 86 marks reach the guest');
+  w.__menuGetGone = true;
+  d.dispatchEvent(new w.Event('visibilitychange')); await sleep(60);
+  assert(d.querySelector('#menu-body .menu-head').textContent==='Party v2', 'a 404 after a successful load keeps the last rendered menu');
+  w.__menuGetGone = false;
+  w.eval('sharedMenu=null; sharedMenuId=null; _guestKey=null; _guestWarned=false; if(_guestT){clearInterval(_guestT); _guestT=null;} renderMenu();'); await sleep(50);
   w.eval('enterSharedMenu(parseMenuHash('+JSON.stringify(hash)+'))'); await sleep(20);
   assert(d.body.classList.contains('menuMode') && d.getElementById('menu-exit').classList.contains('hidden')
       && d.getElementById('menu-share').classList.contains('hidden') && d.getElementById('menu-curate').classList.contains('hidden'),
@@ -498,6 +561,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('importJSON('+JSON.stringify(wlBackup)+')')===null, 'backup with wishlist imports');
   assert(w.eval('S.wishlist.length')===1 && w.eval('S.wishlist[0].img').startsWith('data:image') && w.eval('S.bottles.length')===bottleCount, 'wishlist photos survive the backup round-trip');
 
+  // --- quota safety: a photo either persists or visibly does not happen ---
+  w.eval('window.__origSI = Storage.prototype.setItem; Storage.prototype.setItem = function(){ throw new Error("QuotaExceededError"); };');
+  const wlBefore = w.eval('S.wishlist.length');
+  assert(w.upsertWish({ name:'Huge Photo', img:'data:image/jpeg;base64,aGk=' })===null && w.eval('S.wishlist.length')===wlBefore,
+    'an unsaveable photo reverts — nothing half-saved');
+  assert(/fit in storage/.test(d.getElementById('toast').textContent), 'the quota toast explains what happened');
+  assert(w.eval('storageFull')===true, 'the storageFull flag is set');
+  w.eval('openSettings()'); await sleep(20);
+  assert(/Storage is full/.test(d.getElementById('modal').textContent), 'Settings shows the persistent storage warning');
+  w.eval('closeModal(); Storage.prototype.setItem = window.__origSI;');
+  w.eval('saveNow()');
+  assert(w.eval('storageFull')===false, 'the flag clears on the next successful write');
+
   // --- tap an unlock -> wishlist ---
   w.eval('setTab("tonight")');
   let uwBtn = [...d.querySelectorAll('#unlock-list .uw')].find(b=>b.dataset.label==='orange liqueur');
@@ -521,6 +597,40 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('S.menuTitle')==='Restored Bar' && w.eval('SYNC.token')===altCode, 'restore replaces state and adopts the new code');
   assert(typeof (await w.syncRestore('not-a-code'))==='string', 'a malformed code is rejected politely');
   assert(typeof (await w.syncRestore('c'.repeat(32)))==='string', 'an unknown code reports no backup found');
+
+  // --- sync conflict tripwire: two devices, one code ---
+  await sleep(350); // let the restore's debounced save land
+  w.eval('clearTimeout(_pushT);');
+  w.__syncPuts = 0;
+  const conflictState = JSON.parse(w.eval('exportJSON()'));
+  conflictState.menuTitle = 'Other Device Bar';
+  conflictState.savedAt = Date.now() + 9e9;
+  w.__syncStore[altCode] = JSON.stringify(conflictState);
+  w.eval('_syncChecked=false; _syncBlocked=false;');
+  await w.syncPush(); await sleep(30);
+  assert(w.__syncPuts===0 && w.eval('_syncBlocked')===true, 'a newer remote copy blocks the push');
+  assert(d.getElementById('sc-keep')!==null && d.getElementById('sc-restore')!==null, 'the conflict modal offers both ways out');
+  await w.syncPush(); await sleep(30);
+  assert(w.__syncPuts===0, 'pushes stay paused until the user picks a side');
+  d.getElementById('sc-keep').click(); await sleep(60);
+  assert(w.__syncPuts===1 && !d.getElementById('modalwrap').classList.contains('on'), 'keep-this-phone pushes once and closes the modal');
+  assert(JSON.parse(w.__syncStore[altCode]).menuTitle===w.eval('S.menuTitle'), 'the cloud copy now matches this phone');
+
+  // dismissing the conflict modal (backdrop / back gesture) must not strand cloud backup
+  w.__syncPuts = 0;
+  const conflict2 = JSON.parse(w.eval('exportJSON()'));
+  conflict2.menuTitle = 'Device C Bar';
+  conflict2.savedAt = Date.now() + 95e8;
+  w.__syncStore[altCode] = JSON.stringify(conflict2);
+  w.eval('clearTimeout(_pushT); _syncChecked=false; _syncBlocked=false;');
+  await w.syncPush(); await sleep(30);
+  assert(w.eval('_syncBlocked')===true && d.getElementById('sc-keep')!==null, 'a second conflict re-arms the tripwire');
+  w.eval('closeModal()'); await sleep(20); // the reflex backdrop-tap dismissal
+  assert(w.eval('_syncBlocked')===false && w.eval('_syncChecked')===false, 'dismissing without choosing re-arms instead of stranding backups');
+  await w.syncPush(); await sleep(30);
+  assert(d.getElementById('sc-keep')!==null && w.__syncPuts===0, 'the next push re-prompts the choice, still without overwriting');
+  d.getElementById('sc-keep').click(); await sleep(60);
+  assert(w.__syncPuts===1, 'and choosing keep finally pushes');
 
   // --- AI bartender ---
   w.eval('setTab("tonight")'); await sleep(20);
@@ -546,11 +656,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('rq-guest').value = 'Maria';
   d.getElementById('rq-send').click(); await sleep(60);
   assert(w.__reqStore.length===1 && w.__reqStore[0].drink==='Negroni' && w.__reqStore[0].guest==='Maria', 'a guest request posts to the worker');
-  w.eval('sharedMenu=null; sharedMenuId=null; renderMenu();'); await sleep(120);
+  w.eval('sharedMenu=null; sharedMenuId=null; if(_guestT){clearInterval(_guestT); _guestT=null;} renderMenu();'); await sleep(120);
   assert(!d.getElementById('menu-reqs').classList.contains('hidden'), 'the host sees the request bell in admin menu mode');
   assert(d.getElementById('menu-reqs').textContent.includes('1'), 'the bell shows the request count');
+  assert(w.eval('S.menuId')==='abc123', 'the bell polls the stable S.menuId');
   await w.openRequestInbox(); await sleep(60);
   assert(d.getElementById('modal').textContent.includes('Negroni') && d.getElementById('modal').textContent.includes('Maria'), 'the inbox lists who wants what');
+  assert(w.__lastReqAuth==='Bearer ' + 'a'.repeat(32), 'inbox reads carry the owner token');
   d.getElementById('rq-clear').click(); await sleep(80);
   assert(w.__reqStore.length===0, 'clear-all empties the request box');
   w.eval('closeModal(); setTab("shelf");');
@@ -581,6 +693,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('deleteRecipe('+cq+'.id)');
   w.eval('deleteBottle(S.bottles.find(b=>b.name==="Diplomatico").id)');
   w.eval('setTab("shelf")');
+
+  // --- back gesture closes an open modal, not the page ---
+  w.eval('openModal("<h2>history test</h2>")'); await sleep(10);
+  assert(d.getElementById('modalwrap').classList.contains('on'), 'modal opens (and pushes a history entry)');
+  w.eval('window.dispatchEvent(new PopStateEvent("popstate"))'); await sleep(10);
+  assert(!d.getElementById('modalwrap').classList.contains('on'), 'popstate closes the modal instead of leaving the page');
+
+  // stop the pollers so node can exit cleanly
+  w.eval('stopBellPoll(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
 
   // --- persistence + migration guard ---
   await sleep(600); // let the debounced save flush

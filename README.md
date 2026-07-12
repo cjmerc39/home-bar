@@ -17,7 +17,8 @@ Settings as the backup story.
 
 ```
 npm i jsdom
-node home-bar.test.js
+node home-bar.test.js          # app suite (jsdom)
+node home-bar-worker.test.js   # worker suite (no deps)
 ```
 
 ## Deploy the AI scan worker
@@ -25,7 +26,10 @@ node home-bar.test.js
 The photo scan needs a tiny Cloudflare Worker so the Anthropic API key stays
 server-side. Full step-by-step instructions are in the comment block at the
 top of `home-bar-worker.js` — in short: create a worker named `home-bar`,
-paste the file, deploy, and add your `ANTHROPIC_API_KEY` as a secret.
+paste the file, deploy, and add your `ANTHROPIC_API_KEY` as a secret. The
+worker also hosts stable shareable menu links (owner-token updates in place,
+so guests' links stay live), guest drink requests, the AI bartender/recipe
+endpoints, and the cloud-backup store (a KV namespace bound as `MENUS`).
 
 If `SCAN_URL` in `index.html` is set to an empty string, the scan button
 disappears and everything else works normally.

@@ -20,18 +20,23 @@
  * POST /scan     -> { media_type, data } in (base64 image), { bottles: [...] } out.
  * POST /recipe   -> { text } or { media_type, data } (+ optional staples[]) in,
  *                   { recipe: {...} } out — drafts a structured cocktail spec.
- * POST /menu     -> menu payload in, { id } out (stored 90 days in KV).
- * GET  /menu/:id -> the stored payload as JSON (used by the app).
- * GET  /m/:id    -> a tiny HTML page with link-preview tags (title = menu
- *                   title) that forwards guests to the app.
- * PUT  /sync     -> full app state in (Bearer <backup code>), stored in KV.
- * GET  /sync     -> the stored state back (same Bearer code). Powers the
- *                   app's automatic cloud backup / restore-on-new-phone.
- * POST /bartender-> { mood, drinks } in, { picks: [{name, why}] } out — the
- *                   AI recommends from tonight's makeable list.
- * POST /menu/:id/req    -> { drink, guest? } — a guest requests a drink.
- * GET  /menu/:id/req    -> { requests } — the host's inbox.
- * DELETE /menu/:id/req  -> clear the inbox.
+ * POST /menu       -> menu payload in, { id, owner } out (stored 90 days in
+ *                     KV; keep the owner token secret — it edits the menu).
+ * PUT  /menu/:id   -> updated payload in (Bearer <owner>), updates in place
+ *                     so guests' links stay live. 403 on a wrong owner.
+ * DELETE /menu/:id -> (Bearer <owner>) revoke the link: menu, owner, and
+ *                     pending requests all deleted.
+ * GET  /menu/:id   -> the stored payload as JSON, no-store (guests refetch).
+ * GET  /m/:id      -> a tiny HTML page with link-preview tags (title = menu
+ *                     title) that forwards guests to the app.
+ * PUT  /sync       -> full app state in (Bearer <backup code>), stored in KV.
+ * GET  /sync       -> the stored state back (same Bearer code). Powers the
+ *                     app's automatic cloud backup / restore-on-new-phone.
+ * POST /bartender  -> { mood, drinks } in, { picks: [{name, why}] } out — the
+ *                     AI recommends from tonight's makeable list.
+ * POST /menu/:id/req   -> { drink, guest? } — a guest requests a drink (open).
+ * GET  /menu/:id/req   -> { requests } — the host's inbox (Bearer <owner>).
+ * DELETE /menu/:id/req -> clear the inbox (Bearer <owner>).
  * The API key never leaves the worker.
  */
 
@@ -103,11 +108,13 @@ export default {
     if (path === '/bartender' && request.method === 'POST') return bartender(request, env, cors);
     const mReq = /^\/menu\/([A-Za-z0-9]{4,32})\/req$/.exec(path);
     if (mReq && request.method === 'POST') return reqAdd(mReq[1], request, env, cors);
-    if (mReq && request.method === 'GET') return reqList(mReq[1], env, cors);
-    if (mReq && request.method === 'DELETE') return reqClear(mReq[1], env, cors);
+    if (mReq && request.method === 'GET') return reqList(mReq[1], request, env, cors);
+    if (mReq && request.method === 'DELETE') return reqClear(mReq[1], request, env, cors);
     if (path === '/menu' && request.method === 'POST') return menuCreate(request, env, cors);
     const mGet = /^\/menu\/([A-Za-z0-9]{4,32})$/.exec(path);
     if (mGet && request.method === 'GET') return menuGet(mGet[1], env, cors);
+    if (mGet && request.method === 'PUT') return menuUpdate(mGet[1], request, env, cors);
+    if (mGet && request.method === 'DELETE') return menuDelete(mGet[1], request, env, cors);
     const mPage = /^\/m\/([A-Za-z0-9]{4,32})$/.exec(path);
     if (mPage && request.method === 'GET') return menuPage(mPage[1], env);
     return json({ error: 'not found' }, 404, cors);
@@ -363,14 +370,16 @@ async function reqAdd(id, request, env, cors) {
   await env.MENUS.put('req:' + id, JSON.stringify(list), { expirationTtl: MENU_TTL });
   return json({ ok: true, count: list.length }, 200, cors);
 }
-async function reqList(id, env, cors) {
+async function reqList(id, request, env, cors) {
   if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  if (!(await menuOwnerOk(id, request, env))) return json({ error: 'forbidden' }, 403, cors);
   let list = [];
   try { list = JSON.parse(await env.MENUS.get('req:' + id) || '[]'); } catch (e) {}
   return json({ requests: Array.isArray(list) ? list : [] }, 200, cors);
 }
-async function reqClear(id, env, cors) {
+async function reqClear(id, request, env, cors) {
   if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  if (!(await menuOwnerOk(id, request, env))) return json({ error: 'forbidden' }, 403, cors);
   await env.MENUS.delete('req:' + id);
   return json({ ok: true }, 200, cors);
 }
@@ -406,6 +415,21 @@ function menuId() {
   const a = crypto.getRandomValues(new Uint8Array(8));
   return [...a].map((b) => (b % 36).toString(36)).join('');
 }
+function ownerToken() {
+  const a = crypto.getRandomValues(new Uint8Array(16));
+  return [...a].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+function bearer(request) {
+  const m = /^Bearer ([a-f0-9]{32,64})$/.exec(request.headers.get('authorization') || '');
+  return m ? m[1] : null;
+}
+// legacy ids (pre-owner) have no o: key and therefore fail every owner check
+async function menuOwnerOk(id, request, env) {
+  const tok = bearer(request);
+  if (!tok) return false;
+  const stored = await env.MENUS.get('o:' + id);
+  return !!stored && stored === tok;
+}
 async function menuCreate(request, env, cors) {
   if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound — see the deploy steps at the top of this file' }, 500, cors);
   let body;
@@ -415,8 +439,32 @@ async function menuCreate(request, env, cors) {
   const blob = JSON.stringify(clean);
   if (blob.length > 32768) return json({ error: 'menu too large' }, 413, cors);
   const id = menuId();
+  const owner = ownerToken();
   await env.MENUS.put('m:' + id, blob, { expirationTtl: MENU_TTL });
-  return json({ id }, 200, cors);
+  await env.MENUS.put('o:' + id, owner, { expirationTtl: MENU_TTL });
+  return json({ id, owner }, 200, cors);
+}
+async function menuUpdate(id, request, env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  if (!(await menuOwnerOk(id, request, env))) return json({ error: 'forbidden' }, 403, cors);
+  if (!(await env.MENUS.get('m:' + id))) return json({ error: 'menu expired' }, 404, cors);
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: 'bad request body' }, 400, cors); }
+  const clean = cleanMenuPayload(body);
+  if (!clean) return json({ error: 'not a menu payload' }, 400, cors);
+  const blob = JSON.stringify(clean);
+  if (blob.length > 32768) return json({ error: 'menu too large' }, 413, cors);
+  await env.MENUS.put('m:' + id, blob, { expirationTtl: MENU_TTL });                      // refresh TTL
+  await env.MENUS.put('o:' + id, bearer(request), { expirationTtl: MENU_TTL });           // keep owner alive as long as the menu
+  return json({ ok: true }, 200, cors);
+}
+async function menuDelete(id, request, env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  if (!(await menuOwnerOk(id, request, env))) return json({ error: 'forbidden' }, 403, cors);
+  await env.MENUS.delete('m:' + id);
+  await env.MENUS.delete('o:' + id);
+  await env.MENUS.delete('req:' + id);
+  return json({ ok: true }, 200, cors);
 }
 async function menuGet(id, env, cors) {
   if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
@@ -424,7 +472,7 @@ async function menuGet(id, env, cors) {
   if (!v) return json({ error: 'menu expired' }, 404, cors);
   return new Response(v, {
     status: 200,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=3600', ...cors },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...cors },
   });
 }
 function escHtml(s) {

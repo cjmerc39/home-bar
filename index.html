@@ -166,6 +166,8 @@ body.menuMode #tabbar,body.menuMode #topbar{display:none}
 @keyframes sp{to{transform:rotate(360deg)}}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom));background:var(--bg3);border:1px solid var(--brassdim);color:var(--ink);padding:10px 18px;border-radius:99px;z-index:30;display:none;font-size:14px;max-width:88vw;text-align:center}
 #toast.on{display:block}
+#toast .tact{color:var(--brass2);font-weight:700;margin-left:10px;text-decoration:underline;text-underline-offset:3px}
+.bnote{font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .ing-line{display:flex;gap:8px;padding:3px 0}
 .ing-line .qty{color:var(--brass2);min-width:64px;text-align:right}
 .ing-line.miss .lbl{color:var(--bad)}
@@ -401,7 +403,7 @@ function seedRecipes(){
 
 /* ============================== state ============================== */
 let S = null;
-function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[] }; }
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[], menuId:null, menuOwner:null, savedAt:0 }; }
 function load(){
   let raw = null;
   try{ raw = localStorage.getItem(KEY); }catch(e){}
@@ -425,13 +427,25 @@ function load(){
   if(typeof d.featureLabel !== 'string' || !d.featureLabel.trim()) d.featureLabel = 'drink of the night';
   if(!Array.isArray(d.beerWine)) d.beerWine = [];
   if(!Array.isArray(d.customBW)) d.customBW = [];
+  if(typeof d.menuId !== 'string') d.menuId = null;
+  if(typeof d.menuOwner !== 'string') d.menuOwner = null;
+  if(typeof d.savedAt !== 'number') d.savedAt = 0;
   return d;
 }
-let _saveT = null;
+let _saveT = null, storageFull = false;
+function persist(){ // the one true writer — stamps savedAt for sync conflict detection
+  S.savedAt = Date.now();
+  localStorage.setItem(KEY, JSON.stringify(S));
+}
 function save(){ clearTimeout(_saveT); _saveT = setTimeout(()=>{
-  try{ localStorage.setItem(KEY, JSON.stringify(S)); schedulePush(); }
-  catch(e){ toast('Storage is full — remove a wishlist photo or export a backup.'); }
+  try{ persist(); storageFull = false; schedulePush(); }
+  catch(e){ storageFull = true; toast('Storage is full — remove a wishlist photo or export a backup.'); }
 }, 300); }
+function saveNow(){ // synchronous, reports success — for writes that must not half-happen
+  clearTimeout(_saveT);
+  try{ persist(); storageFull = false; schedulePush(); return true; }
+  catch(e){ storageFull = true; return false; }
+}
 function uid(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 /* ============================== matcher ============================== */
@@ -507,7 +521,14 @@ function upsertBottle(b){
   if(i >= 0) S.bottles[i] = b; else S.bottles.push(b);
   save(); renderAll(); return b.id;
 }
-function deleteBottle(id){ S.bottles = S.bottles.filter(b => b.id !== id); save(); renderAll(); }
+function deleteBottle(id){
+  const i = S.bottles.findIndex(b => b.id === id);
+  if(i < 0) return;
+  const [b] = S.bottles.splice(i, 1);
+  save(); renderAll();
+  toast('Removed ' + b.name + '.', { label:'Undo', duration:6000,
+    onAction: () => { S.bottles.splice(Math.min(i, S.bottles.length), 0, b); save(); renderAll(); } });
+}
 function cycleLevel(id){
   const b = S.bottles.find(x => x.id === id); if(!b) return;
   b.level = LEVELS[(LEVELS.indexOf(b.level) + 1) % LEVELS.length];
@@ -524,7 +545,14 @@ function upsertRecipe(r){
   if(i >= 0) S.recipes[i] = r; else S.recipes.push(r);
   save(); renderAll(); return r.id;
 }
-function deleteRecipe(id){ S.recipes = S.recipes.filter(r => r.id !== id); save(); renderAll(); }
+function deleteRecipe(id){
+  const i = S.recipes.findIndex(r => r.id === id);
+  if(i < 0) return;
+  const [r] = S.recipes.splice(i, 1);
+  save(); renderAll();
+  toast('Deleted ' + r.name + '.', { label:'Undo', duration:6000,
+    onAction: () => { S.recipes.splice(Math.min(i, S.recipes.length), 0, r); save(); renderAll(); } });
+}
 function recipeBase(r){
   let first = null;
   for(const ing of r.ingredients){
@@ -562,8 +590,18 @@ function upsertWish(wi){
   wi.name = (wi.name||'').trim();
   if(!wi.name) return null;
   const i = S.wishlist.findIndex(x => x.id === wi.id);
+  const prev = i >= 0 ? S.wishlist[i] : null;
   if(i >= 0) S.wishlist[i] = wi; else S.wishlist.push(wi);
-  save(); renderAll(); return wi.id;
+  if(wi.img){
+    // photos are the quota risk: persist atomically or visibly not at all
+    if(!saveNow()){
+      if(prev) S.wishlist[i] = prev; else S.wishlist.pop();
+      toast('That photo doesn’t fit in storage. Remove a photo or export a backup.');
+      renderAll();
+      return null;
+    }
+  } else save();
+  renderAll(); return wi.id;
 }
 function deleteWish(id){ S.wishlist = S.wishlist.filter(x => x.id !== id); save(); renderAll(); }
 let _wishFileCb = null;
@@ -614,6 +652,9 @@ function importJSON(text){
   if(typeof d.featureLabel !== 'string' || !d.featureLabel.trim()) d.featureLabel = 'drink of the night';
   if(!Array.isArray(d.beerWine)) d.beerWine = [];
   if(!Array.isArray(d.customBW)) d.customBW = [];
+  if(typeof d.menuId !== 'string') d.menuId = null;
+  if(typeof d.menuOwner !== 'string') d.menuOwner = null;
+  if(typeof d.savedAt !== 'number') d.savedAt = 0;
   S = d; save(); renderAll(); return null;
 }
 function downloadBackup(){
@@ -638,22 +679,73 @@ function newSyncToken(){
   }
 }
 function enableSync(){
-  if(!SYNC){ SYNC = { token: newSyncToken(), last: 0 }; saveSyncMeta(); }
+  if(!SYNC){ SYNC = { token: newSyncToken(), last: 0, remoteSavedAt: 0 }; saveSyncMeta(); }
   schedulePush(true);
 }
-let _pushT = null;
+let _pushT = null, _syncChecked = false, _syncBlocked = false;
 function schedulePush(now){
   if(!SYNC || !CFG.syncUrl) return;
   clearTimeout(_pushT); _pushT = setTimeout(syncPush, now ? 50 : 4000);
 }
-async function syncPush(){
-  if(!SYNC || !CFG.syncUrl) return;
+async function doSyncPush(){
   try{
     const r = await fetch(CFG.syncUrl, { method:'PUT',
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + SYNC.token },
       body: JSON.stringify(S) });
-    if(r.ok){ SYNC.last = Date.now(); saveSyncMeta(); }
+    if(r.ok){ SYNC.last = Date.now(); SYNC.remoteSavedAt = S.savedAt || 0; saveSyncMeta(); }
   }catch(e){} // offline is fine — next save retries
+}
+async function syncPush(){
+  if(!SYNC || !CFG.syncUrl || _syncBlocked) return;
+  if(!_syncChecked){
+    // tripwire, once per boot: has another device pushed since we last synced?
+    _syncChecked = true;
+    try{
+      const r = await fetch(CFG.syncUrl, { headers:{ 'Authorization':'Bearer ' + SYNC.token } });
+      if(r.ok){
+        const j = await r.json().catch(()=>null);
+        const remoteAt = (j && typeof j.savedAt === 'number') ? j.savedAt : 0;
+        if(remoteAt > (SYNC.remoteSavedAt || 0)){
+          _syncBlocked = true; // pause pushes until the user picks a side
+          openSyncConflict();
+          return;
+        }
+      }
+    }catch(e){}
+  }
+  await doSyncPush();
+}
+let _conflictOpen = false;
+function openSyncConflict(){
+  _conflictOpen = true;
+  openModal('<h2>Another device updated the cloud backup</h2>' +
+    '<div class="small mut" style="margin:6px 0 14px">Since this phone last synced, a different device pushed changes. Which copy should win? Backing up is paused until you choose.</div>' +
+    '<div style="display:flex;gap:8px;flex-direction:column">' +
+    '<button class="abtn" id="sc-restore">Restore the other device’s copy here</button>' +
+    '<button class="abtn ghost" id="sc-keep">Keep this phone’s copy (overwrite)</button></div>');
+  document.getElementById('sc-restore').onclick = async () => {
+    const err = await syncRestore(SYNC.token);
+    if(err){ toast(err); return; } // still blocked, modal still open — retry or pick keep
+    _conflictOpen = false; _syncBlocked = false;
+    closeModal(); toast('Restored the other device’s copy.');
+  };
+  document.getElementById('sc-keep').onclick = async () => {
+    _conflictOpen = false; _syncBlocked = false;
+    await doSyncPush();
+    closeModal(); toast('This phone’s copy is now the cloud backup.');
+  };
+}
+async function bootSyncCheck(){ // non-blocking heads-up; never auto-restores
+  if(!SYNC || !CFG.syncUrl) return;
+  try{
+    const r = await fetch(CFG.syncUrl, { headers:{ 'Authorization':'Bearer ' + SYNC.token } });
+    if(!r.ok) return;
+    const j = await r.json().catch(()=>null);
+    if(j && typeof j.savedAt === 'number' && j.savedAt > (S.savedAt || 0)){
+      toast('The cloud backup is newer than this phone.', { label:'Restore', duration:10000,
+        onAction: async () => { const err = await syncRestore(SYNC.token); toast(err || 'Restored from the cloud backup.'); } });
+    }
+  }catch(e){}
 }
 async function syncRestore(code){
   code = String(code||'').trim().toLowerCase();
@@ -667,7 +759,7 @@ async function syncRestore(code){
   if(!r.ok) return 'No backup found for that code.';
   const err = importJSON(text);
   if(err) return err;
-  SYNC = { token: code, last: Date.now() }; saveSyncMeta();
+  SYNC = { token: code, last: Date.now(), remoteSavedAt: S.savedAt || Date.now() }; saveSyncMeta();
   return null;
 }
 
@@ -865,10 +957,7 @@ async function askBartender(){
 
 /* ============================== guest drink requests ============================== */
 let sharedMenuId = null; // set when a guest arrives via a short link
-function currentMenuId(){
-  return (_menuLink.url && CFG.menuPage && _menuLink.url.indexOf(CFG.menuPage) === 0)
-    ? _menuLink.url.slice(CFG.menuPage.length) : null;
-}
+function currentMenuId(){ return S.menuId || null; }
 function openRequestSheet(name){
   openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>Request a ' + esc(name) + '?</h2>' +
     '<label class="fieldlbl">Your name <span class="dim">(optional)</span></label>' +
@@ -888,20 +977,29 @@ function openRequestSheet(name){
 }
 async function refreshReqCount(){
   const id = currentMenuId(); const btn = document.getElementById('menu-reqs');
-  if(!id || !btn) return;
+  if(!id || !S.menuOwner || !btn) return;
   try{
-    const r = await fetch(CFG.menuUrl + '/' + id + '/req');
+    const r = await fetch(CFG.menuUrl + '/' + id + '/req', { headers:{ 'Authorization':'Bearer ' + S.menuOwner } });
     const j = await r.json().catch(()=>null);
     const n = (r.ok && j && Array.isArray(j.requests)) ? j.requests.length : 0;
     btn.innerHTML = n ? '&#128276; ' + n : '&#128276;';
   }catch(e){}
 }
+// poll the bell while the host is actually looking at Menu Mode
+let _bellT = null;
+function startBellPoll(){
+  stopBellPoll();
+  _bellT = setInterval(() => {
+    if(document.visibilityState === 'visible' && tab === 'menu' && !sharedMenu) refreshReqCount();
+  }, 25000);
+}
+function stopBellPoll(){ if(_bellT){ clearInterval(_bellT); _bellT = null; } }
 async function openRequestInbox(){
-  const id = currentMenuId(); if(!id) return;
+  const id = currentMenuId(); if(!id || !S.menuOwner) return;
   openModal('<h2>Drink requests</h2><div class="spin"></div>');
   let list = [];
   try{
-    const r = await fetch(CFG.menuUrl + '/' + id + '/req');
+    const r = await fetch(CFG.menuUrl + '/' + id + '/req', { headers:{ 'Authorization':'Bearer ' + S.menuOwner } });
     const j = await r.json().catch(()=>null);
     if(r.ok && j && Array.isArray(j.requests)) list = j.requests;
   }catch(e){}
@@ -915,7 +1013,7 @@ async function openRequestInbox(){
   document.getElementById('rq-refresh').onclick = openRequestInbox;
   document.getElementById('rq-clear').onclick = async () => {
     if(!confirm('Clear all requests?')) return;
-    try{ await fetch(CFG.menuUrl + '/' + id + '/req', { method:'DELETE' }); }catch(e){}
+    try{ await fetch(CFG.menuUrl + '/' + id + '/req', { method:'DELETE', headers:{ 'Authorization':'Bearer ' + S.menuOwner } }); }catch(e){}
     refreshReqCount(); openRequestInbox();
   };
 }
@@ -935,6 +1033,7 @@ function setTab(t){
   document.querySelectorAll('section.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + t));
   document.body.classList.toggle('menuMode', t === 'menu');
   renderAll();
+  if(t === 'menu' && !sharedMenu) startBellPoll(); else stopBellPoll();
   try{ const sc = document.querySelector('main'); if(sc && sc.scrollTo) sc.scrollTo(0,0); }catch(e){}
 }
 function renderAll(){
@@ -969,6 +1068,7 @@ function renderShelf(){
       html.push('<div class="bottle ', b.level, '" data-id="', b.id, '">',
         '<div class="grow"><div class="bname">', esc(b.name), '</div>',
         b.subtype ? '<div class="bsub">' + esc(b.subtype) + '</div>' : '',
+        b.notes ? '<div class="bnote">' + esc(b.notes) + '</div>' : '',
         '</div><span class="lvl ', b.level, '">', b.level, '</span>',
         '<button class="editb" data-edit="', b.id, '" title="Edit">&#9998;</button></div>');
     }
@@ -1163,7 +1263,7 @@ function renderMenu(){
   const reqBtn = document.getElementById('menu-reqs');
   reqBtn.classList.add('hidden');
   if(!sharedMenu && CFG.menuUrl){
-    createMenuLink().then(() => {
+    ensureMenuLink().then(() => {
       if(sharedMenu || !document.body.classList.contains('menuMode')) return;
       if(!currentMenuId()) return; // long-link fallback has no request inbox
       reqBtn.classList.remove('hidden');
@@ -1184,30 +1284,76 @@ function parseMenuHash(hash){
   }catch(e){ return null; }
 }
 function enterSharedMenu(p){ sharedMenu = p; setTab('menu'); }
-// short link: the worker stores the menu and serves /m/<id> with a proper
-// link preview (title = menu title). Falls back to the long #m= link.
-let _menuLink = { key:null, url:null };
-async function createMenuLink(){
+// stable short link: ONE long-lived menu id per bar, updated in place with an
+// owner token — guests keep the same URL and their requests keep landing.
+// Falls back to the long #m= link when the worker is unreachable.
+let _menuPush = { key:null, url:null }; // last successfully pushed payload
+async function ensureMenuLink(){
   const payload = menuPayload();
   const key = JSON.stringify(payload);
-  if(_menuLink.key === key && _menuLink.url) return _menuLink.url;
-  let url = null;
-  if(CFG.menuUrl){
+  if(!CFG.menuUrl) return buildMenuLink();
+  if(S.menuId && S.menuOwner){
+    const url = CFG.menuPage + S.menuId;
+    if(_menuPush.key === key && _menuPush.url === url) return url; // unchanged: costs nothing
     try{
-      const r = await fetch(CFG.menuUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: key });
-      const j = await r.json().catch(()=>null);
-      if(r.ok && j && /^[A-Za-z0-9]{4,32}$/.test(String(j.id||''))) url = CFG.menuPage + j.id;
+      const r = await fetch(CFG.menuUrl + '/' + S.menuId, { method:'PUT',
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + S.menuOwner }, body: key });
+      if(r.ok){ _menuPush = { key, url }; return url; }
+      if(r.status === 404 || r.status === 403){ // expired or revoked: mint fresh
+        S.menuId = null; S.menuOwner = null; _menuPush = { key:null, url:null }; save();
+        return ensureMenuLink();
+      }
     }catch(e){}
+    return buildMenuLink(); // temporarily unreachable — don't cache the fallback
   }
-  if(!url) url = buildMenuLink();
-  _menuLink = { key, url };
-  return url;
+  try{
+    const r = await fetch(CFG.menuUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: key });
+    const j = await r.json().catch(()=>null);
+    if(r.ok && j && /^[A-Za-z0-9]{4,32}$/.test(String(j.id||'')) && /^[a-f0-9]{32,64}$/.test(String(j.owner||''))){
+      S.menuId = j.id; S.menuOwner = j.owner; save();
+      const url = CFG.menuPage + j.id;
+      _menuPush = { key, url };
+      return url;
+    }
+  }catch(e){}
+  return buildMenuLink();
+}
+async function rotateMenuLink(){ // revoke last month's link, mint a fresh one
+  if(S.menuId && S.menuOwner && CFG.menuUrl){
+    try{ await fetch(CFG.menuUrl + '/' + S.menuId, { method:'DELETE', headers:{ 'Authorization':'Bearer ' + S.menuOwner } }); }catch(e){}
+  }
+  S.menuId = null; S.menuOwner = null; _menuPush = { key:null, url:null }; save();
+  const url = await ensureMenuLink();
+  toast(url.indexOf(CFG.menuPage) === 0 ? 'Fresh menu link ready — the old one is dead.' : 'Old link revoked; new short link when back online.');
+}
+// guest side: refetch the live payload so 86'd bottles reach their phones
+let _guestKey = null, _guestT = null, _guestWarned = false;
+async function refreshSharedMenu(){
+  if(!sharedMenu || !sharedMenuId || !CFG.menuUrl) return;
+  try{
+    const r = await fetch(CFG.menuUrl + '/' + sharedMenuId);
+    if(r.status === 404){
+      if(!_guestWarned){ _guestWarned = true; toast('This menu may be out of date.'); }
+      return; // keep the last rendered payload
+    }
+    const j = await r.json().catch(()=>null);
+    if(!r.ok || !validMenuPayload(j)) return;
+    const key = JSON.stringify(j);
+    if(key !== _guestKey){ _guestKey = key; sharedMenu = j; renderMenu(); }
+  }catch(e){}
 }
 async function loadSharedMenu(id){
   try{
     const r = await fetch(CFG.menuUrl + '/' + id);
     const j = await r.json().catch(()=>null);
-    if(r.ok && validMenuPayload(j)){ sharedMenuId = id; enterSharedMenu(j); return; }
+    if(r.ok && validMenuPayload(j)){
+      sharedMenuId = id;
+      _guestKey = JSON.stringify(j);
+      enterSharedMenu(j);
+      clearInterval(_guestT);
+      _guestT = setInterval(() => { if(document.visibilityState === 'visible') refreshSharedMenu(); }, 60000);
+      return;
+    }
   }catch(e){}
   toast('That menu link has expired.');
 }
@@ -1298,7 +1444,7 @@ function openMenuPicker(){
   };
 }
 async function shareMenu(){
-  const url = await createMenuLink(); // usually instant — pre-warmed when the menu renders
+  const url = await ensureMenuLink(); // usually instant — pre-warmed when the menu renders
   try{
     if(navigator.share){ await navigator.share({ title: S.menuTitle, url }); return; }
     await navigator.clipboard.writeText(url);
@@ -1310,13 +1456,43 @@ async function shareMenu(){
 }
 
 /* ============================== forms & sheets ============================== */
-function openModal(html){ document.getElementById('modal').innerHTML = html; document.getElementById('modalwrap').classList.add('on'); }
-function closeModal(){ document.getElementById('modalwrap').classList.remove('on'); document.getElementById('modal').innerHTML = ''; }
+// Android's back gesture should close an open sheet, not leave the page —
+// one history entry per open modal, cleaned up however the modal closes.
+let _modalPushed = false, _modalPopClosing = false;
+function openModal(html){
+  document.getElementById('modal').innerHTML = html;
+  document.getElementById('modalwrap').classList.add('on');
+  if(!_modalPushed){ try{ history.pushState({ modal:true }, ''); _modalPushed = true; }catch(e){} }
+}
+function closeModal(){
+  document.getElementById('modalwrap').classList.remove('on');
+  document.getElementById('modal').innerHTML = '';
+  if(_modalPushed && !_modalPopClosing){ _modalPushed = false; try{ history.back(); }catch(e){} }
+  else _modalPushed = false;
+  if(_conflictOpen){ // conflict modal dismissed without choosing: re-arm the
+    _conflictOpen = false; // tripwire so the next push re-prompts instead of
+    _syncChecked = false; _syncBlocked = false; // stranding cloud backup silently
+  }
+}
+window.addEventListener('popstate', () => {
+  if(document.getElementById('modalwrap').classList.contains('on')){
+    _modalPopClosing = true; _modalPushed = false;
+    closeModal();
+    _modalPopClosing = false;
+  }
+});
 let _toastT = null;
-function toast(msg){
+function toast(msg, opts){
   const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('on');
-  clearTimeout(_toastT); _toastT = setTimeout(()=>t.classList.remove('on'), 2600);
+  t.innerHTML = esc(msg) + (opts && opts.label ? ' <button class="tact" id="toast-act">' + esc(opts.label) + '</button>' : '');
+  if(opts && opts.label){
+    document.getElementById('toast-act').onclick = () => {
+      t.classList.remove('on'); clearTimeout(_toastT);
+      if(opts.onAction) opts.onAction();
+    };
+  }
+  t.classList.add('on');
+  clearTimeout(_toastT); _toastT = setTimeout(()=>t.classList.remove('on'), (opts && opts.duration) || 2600);
 }
 function catSelect(cls, val){
   return '<select class="' + cls + '">' + CATEGORIES.map(c => '<option' + (c===val?' selected':'') + '>' + c + '</option>').join('') + '</select>';
@@ -1401,7 +1577,7 @@ function openBottleForm(id){
     closeModal();
   };
   const del = document.getElementById('bf-del');
-  if(del) del.onclick = () => { if(confirm('Remove this bottle?')){ deleteBottle(id); closeModal(); } };
+  if(del) del.onclick = () => { closeModal(); deleteBottle(id); }; // undo toast replaces the confirm
 }
 function scaleQty(q, f){
   const n = parseFloat(q);
@@ -1449,7 +1625,7 @@ function openRecipeDetail(id){
   });
   document.getElementById('rd-done').onclick = () => { closeModal(); renderAll(); };
   document.getElementById('rd-edit').onclick = () => openRecipeForm(id);
-  document.getElementById('rd-del').onclick = () => { if(confirm('Delete this recipe?')){ deleteRecipe(id); closeModal(); } };
+  document.getElementById('rd-del').onclick = () => { closeModal(); deleteRecipe(id); }; // undo toast replaces the confirm
 }
 function ingRowHtml(ing){
   const req = ing && ing.req || { tag:{ category:'whiskey' } };
@@ -1570,6 +1746,7 @@ function openSettings(){
     '<label class="fieldlbl">Staples <span class="dim">(household ingredients suggested in recipe forms — comma separated)</span></label>' +
     '<textarea id="st-staples" rows="3">' + esc(S.staples.join(', ')) + '</textarea>' +
     '<hr class="sep"><h3 class="serif" style="color:var(--brass2)">Backup</h3>' +
+    (storageFull ? '<div class="small" style="color:var(--bad);margin:6px 0">Storage is full — recent changes may not be saved. Remove wishlist photos or export a backup.</div>' : '') +
     '<div class="small mut" style="margin:4px 0 10px">Your bar lives only in this browser — export a backup now and then.</div>' +
     '<div style="display:flex;gap:8px"><button class="abtn ghost" id="st-export" style="flex:1">Export JSON</button>' +
     '<button class="abtn ghost" id="st-import" style="flex:1">Import JSON</button></div>' +
@@ -1583,6 +1760,9 @@ function openSettings(){
       '<label class="fieldlbl">Restore from a backup code</label>' +
       '<div style="display:flex;gap:8px"><input id="st-restore" placeholder="paste code"><button class="abtn ghost" id="st-restore-go">Restore</button></div>'
     : '') +
+    '<hr class="sep"><h3 class="serif" style="color:var(--brass2)">Maintenance</h3>' +
+    '<div style="display:flex;gap:8px;margin-top:8px"><button class="abtn ghost" id="st-classics" style="flex:1">Restore missing classics</button>' +
+    (CFG.menuUrl ? '<button class="abtn ghost" id="st-newlink" style="flex:1">New menu link</button>' : '') + '</div>' +
     '<hr class="sep"><button class="abtn danger" id="st-reset" style="width:100%">Reset everything</button>' +
     '<button class="abtn" id="st-done" style="width:100%;margin-top:10px">Done</button>');
   document.getElementById('st-export').onclick = downloadBackup;
@@ -1598,6 +1778,17 @@ function openSettings(){
     const err = await syncRestore(document.getElementById('st-restore').value);
     if(err){ toast(err); return; }
     closeModal(); toast('Restored from the cloud backup.');
+  };
+  document.getElementById('st-classics').onclick = () => {
+    const missing = seedRecipes().filter(s => !S.recipes.some(r => r.id === s.id));
+    for(const m of missing) S.recipes.push(m);
+    if(missing.length){ save(); renderAll(); }
+    toast(missing.length ? 'Restored ' + missing.length + ' classic' + (missing.length === 1 ? '' : 's') + '.' : 'All 34 classics are present.');
+  };
+  const newLink = document.getElementById('st-newlink');
+  if(newLink) newLink.onclick = () => {
+    if(!confirm('Guests holding the old link will lose it. Make a new one?')) return;
+    closeModal(); rotateMenuLink();
   };
   document.getElementById('st-reset').onclick = () => {
     if(confirm('Wipe every bottle, recipe edit, and setting?')){
@@ -1659,6 +1850,11 @@ document.getElementById('spec-search').addEventListener('input', e => { specQuer
 document.getElementById('menu-exit').addEventListener('click', () => setTab('shelf'));
 document.querySelectorAll('#tabbar button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 document.getElementById('modalwrap').addEventListener('click', e => { if(e.target.id === 'modalwrap') closeModal(); });
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState !== 'visible') return;
+  if(sharedMenu && sharedMenuId) refreshSharedMenu();   // guest: pull the live menu
+  else if(tab === 'menu' && !sharedMenu) refreshReqCount(); // host: freshen the bell
+});
 setTab('shelf');
 // opened via a shared-menu link? lock straight into the guest menu
 (function(){
@@ -1667,6 +1863,7 @@ setTab('shelf');
   const p = parseMenuHash(location.hash);
   if(p) enterSharedMenu(p);
 })();
+bootSyncCheck(); // heads-up if the cloud copy is newer than this device
 </script>
 </body>
 </html>
