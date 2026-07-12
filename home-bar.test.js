@@ -22,7 +22,15 @@ const dom = new JSDOM(html, {
         return v ? { ok:true, status:200, json: async()=>JSON.parse(v), text: async()=>v }
                  : { ok:false, status:404, json: async()=>({error:'nf'}), text: async()=>'{"error":"nf"}' };
       }
-      if(u.includes('/bartender')) return { ok:true, status:200, json: async () => (w.__bartenderResult || { picks: [] }) };
+      if(u.includes('open-meteo')){
+        if(w.__wxFail) return { ok:false, status:500, json: async () => ({}) };
+        return { ok:true, status:200, json: async () => (w.__wxResult || {}) };
+      }
+      if(u.includes('/bartender')){
+        w.__bartenderBodies = w.__bartenderBodies || [];
+        w.__bartenderBodies.push(String(opts && opts.body || ''));
+        return { ok:true, status:200, json: async () => (w.__bartenderResult || { picks: [] }) };
+      }
       if(u.includes('/req')){
         const auth = String((opts&&opts.headers&&(opts.headers.Authorization||opts.headers.authorization))||'');
         if(opts && opts.method === 'POST'){ w.__reqStore = w.__reqStore || []; w.__reqStore.push(JSON.parse(opts.body)); return { ok:true, status:200, json: async () => ({ ok:true, count:w.__reqStore.length }) }; }
@@ -375,7 +383,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // tabbed picker + beer & wine
   w.eval('openMenuPicker()'); await sleep(20);
-  assert(d.querySelectorAll('#mp-tabs button').length===4, 'menu picker has four tabs');
+  assert(d.querySelectorAll('#mp-tabs button').length===5, 'menu picker has five tabs (theme pane added)');
   const bwTab = [...d.querySelectorAll('#mp-tabs button')].find(b=>b.textContent.includes('Beer'));
   bwTab.click(); await sleep(20);
   assert(!d.querySelector('#modal .mp-pane[data-p="2"]').classList.contains('hidden')
@@ -910,8 +918,140 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('S.nerdMode')===false, 'flipping the switch persists');
   w.eval('closeModal(); setTab("shelf");');
 
+  // ================= BAR-SPEC-1.3: the atmosphere release =================
+  // --- state defaults ---
+  assert(w.eval('S.menuTheme')==='golden' && w.eval('S.geo')===null && w.eval('S.geoAsked')===false, '1.3 fields default to golden / no location');
+  assert(w.eval('fresh().menuTheme')==='golden' && w.eval('fresh().geo')===null, 'fresh state carries the 1.3 defaults');
+
+  // --- the drink render: color is computed, never picked ---
+  const cNeg = JSON.parse(w.eval('JSON.stringify(colorOf(S.recipes.find(r=>r.id==="r23")))'));
+  assert(w.eval('JSON.stringify(colorOf(S.recipes.find(r=>r.id==="r23")))')===JSON.stringify(cNeg), 'colorOf is deterministic');
+  const cDaiq = JSON.parse(w.eval('JSON.stringify(colorOf(S.recipes.find(r=>r.id==="r15")))'));
+  assert(cNeg.r-cNeg.g>60 && cNeg.r>120, 'Negroni lands ruby');
+  assert(cDaiq.r>200 && cDaiq.g>190 && (cDaiq.r-cDaiq.g)<40, 'Daiquiri lands pale straw');
+  const cPP = JSON.parse(w.eval('JSON.stringify(colorOf(S.recipes.find(r=>r.id==="r06")))'));
+  assert(cPP.r>150 && cPP.g>90 && cPP.g<160 && cPP.b<100, 'Paper Plane lands sunset orange');
+  const cEM = JSON.parse(w.eval('JSON.stringify(colorOf(S.recipes.find(r=>r.id==="r31")))'));
+  assert(cEM.r<80 && cEM.g<80 && cEM.foam===true, 'Espresso Martini lands near-black with a head hint');
+  assert(w.eval('colorOf(S.recipes.find(r=>r.id==="r03")).foam')===true, 'a zero-volume egg white still raises the head');
+  w.eval('openRecipeDetail("r03")'); await sleep(20);
+  assert(d.querySelector('#modal .dr-foam')!==null, 'the Whiskey Sour wears its foam band');
+  w.eval('closeModal()');
+  const cPC = JSON.parse(w.eval('JSON.stringify(colorOf(S.recipes.find(r=>r.id==="r20")))'));
+  const cMart = JSON.parse(w.eval('JSON.stringify(colorOf(S.recipes.find(r=>r.id==="r24")))'));
+  assert(cPC.opacity>=0.9 && cMart.opacity<=0.65, 'Piña Colada opaque above the threshold, Martini translucent below');
+  // glass keyword mapping
+  assert(w.eval('glassFor("coupe").key')==='coupe' && w.eval('glassFor("Nick & Nora coupe").key')==='coupe', 'coupe keyword maps');
+  assert(w.eval('glassFor("double old fashioned").key')==='rocks' && w.eval('glassFor("tiki mug").key')==='rocks', 'rocks fallback catches the rest');
+  assert(w.eval('glassFor("collins").key')==='highball' && w.eval('glassFor("highball").key')==='highball', 'collins and highball share a glass');
+  assert(w.eval('glassFor("flute").key')==='flute' && w.eval('glassFor("wine glass").key')==='wine' && w.eval('glassFor("hurricane").key')==='hurricane' && w.eval('glassFor("martini").key')==='martini', 'the rest of the set maps by keyword');
+  // build drinks layer by specific gravity
+  w.eval('openRecipeDetail("r18")'); await sleep(20); // Dark 'n Stormy
+  assert(d.querySelector('#modal svg.drinkrender')!==null, 'the recipe detail carries the render');
+  const bandSGs = [...d.querySelectorAll('#modal .dr-band')].map(e=>+e.getAttribute('data-sg'));
+  assert(bandSGs.length>=2 && bandSGs.every((v,i)=>i===0||v<=bandSGs[i-1]), 'build bands stack heavy at the bottom, ordered by sgOf');
+  assert(d.querySelector('#modal .dr-float')!==null, 'the dark rum float rides as a distinct top band');
+  assert(/float holds/.test(d.getElementById('modal').textContent), "Dark 'n Stormy: the float holds");
+  w.eval('closeModal(); openRecipeDetail("r22")'); await sleep(20); // Corn 'n Oil
+  assert(/float holds/.test(d.getElementById('modal').textContent), "Corn 'n Oil: the canonical hold");
+  w.eval('closeModal()');
+  w.upsertRecipe({ name:'Sinker', method:'build', glass:'rocks', garnish:'', notes:'', rating:0, house:false,
+    ingredients:[ { qty:'2', unit:'oz', req:{ tag:{ category:'whiskey' } } }, { qty:'0.5', unit:'oz', req:{ tag:{ category:'liqueur', subtype:'coffee' } }, note:'float' } ] });
+  assert(w.eval('floatVerdict(S.recipes.find(r=>r.name==="Sinker")).holds')===false, 'a heavy liqueur floated on neat spirit sinks');
+  w.eval('openRecipeDetail(S.recipes.find(r=>r.name==="Sinker").id)'); await sleep(20);
+  assert(/sinks and marbles/.test(d.getElementById('modal').textContent), 'the sink verdict renders');
+  assert(d.querySelector('#modal .dr-float')===null, 'a sinking float gets no top band — it marbles into the body');
+  w.eval('closeModal()');
+  // SG detail readout rides behind nerd mode; the verdict does not
+  w.eval('S.nerdMode=true; save(); openRecipeDetail("r22")'); await sleep(20);
+  assert(/sg \d\.\d{3}/.test(d.getElementById('modal').textContent), 'nerd mode surfaces per-ingredient SG');
+  w.eval('closeModal(); S.nerdMode=false; save(); openRecipeDetail("r22")'); await sleep(20);
+  assert(!/sg \d\.\d{3}/.test(d.getElementById('modal').textContent) && /float holds/.test(d.getElementById('modal').textContent),
+    'nerd mode off: no SG numbers, verdict still visible');
+  w.eval('closeModal(); deleteRecipe(S.recipes.find(r=>r.name==="Sinker").id);'); await sleep(20);
+  // payload guard: nothing from the render leaks into shared menus
+  const pkeys = Object.keys(JSON.parse(w.eval('JSON.stringify(menuPayload())')));
+  assert(pkeys.every(k=>['t','c','s','f','b','th','su'].includes(k)), 'payload carries only menu fields (+theme/sunset)');
+  assert(JSON.parse(w.eval('JSON.stringify(menuPayload())')).c.every(x=>Object.keys(x).every(k=>['n','d','h','x'].includes(k))), 'no render data on any menu item');
+
+  // --- the weather-aware bartender ---
+  w.eval('setTab("tonight")'); await sleep(30);
+  assert(d.getElementById('wx-line').classList.contains('hidden'), 'no location: no ambient line');
+  w.__bartenderBodies = [];
+  w.__bartenderResult = { picks: [{ name:'Gimlet', why:'crisp and cold.' }] };
+  d.getElementById('bt-mood').value = '';
+  d.getElementById('bt-ask').click(); await sleep(100);
+  const bNoGeo = JSON.parse(w.__bartenderBodies[0]);
+  assert(Object.keys(bNoGeo).join()==='mood,drinks', 'no location: the bartender request is byte-identical to before');
+  w.eval('closeModal()');
+  Object.defineProperty(w.navigator, 'geolocation', { configurable:true,
+    value:{ getCurrentPosition: (ok) => ok({ coords:{ latitude:29.4241, longitude:-98.4936 } }) } });
+  const sunsetMs = Math.floor((Date.now()-3600e3)/1000)*1000; // an hour past sunset
+  w.__wxResult = { current:{ temperature_2m:94.2, relative_humidity_2m:74, weather_code:1 }, daily:{ sunset:[ sunsetMs/1000 ] } };
+  d.getElementById('bt-ask').click(); await sleep(30);
+  assert(d.getElementById('geo-yes')!==null && w.eval('S.geoAsked')===true, 'first bartender use asks once, with an explanation');
+  d.getElementById('geo-yes').click(); await sleep(150);
+  assert(w.eval('S.geo.lat')===29.42 && w.eval('S.geo.lon')===-98.49, 'granted location rounds to 2 decimals (~1km) before storing');
+  const bGeo = JSON.parse(w.__bartenderBodies[1]);
+  assert(bGeo.weather && bGeo.weather.temp===94 && bGeo.weather.humidity===74 && bGeo.weather.condition==='fair' && bGeo.weather.isEvening===true,
+    'granted: weather rides along, evening detected past sunset');
+  w.eval('closeModal(); setTab("tonight");'); await sleep(60);
+  assert(!d.getElementById('wx-line').classList.contains('hidden') && /94° and humid/.test(d.getElementById('wx-line').textContent),
+    'the ambient line reads like a bartender glancing outside');
+  w.eval('_wx={at:0,data:null}'); w.__wxFail = true;
+  d.getElementById('bt-ask').click(); await sleep(100);
+  const bFail = JSON.parse(w.__bartenderBodies[2]);
+  assert(Object.keys(bFail).join()==='mood,drinks', 'a dead weather fetch: request identical to today, no nagging');
+  w.eval('closeModal()'); w.__wxFail = false;
+  w.eval('openSettings()'); await sleep(20);
+  assert(d.getElementById('st-geo-forget')!==null, 'Settings offers Forget my location');
+  d.getElementById('st-geo-forget').click(); await sleep(30);
+  assert(w.eval('S.geo')===null && w.eval('S.geoAsked')===false, 'forgetting nulls the location and re-arms the ask');
+  w.eval('closeModal()');
+  w.eval('setGeo(29.4241, -98.4936)'); // back on for the sundown tests
+
+  // --- themes & sundown ---
+  w.eval('setTab("menu")'); await sleep(30);
+  assert(d.body.getAttribute('data-theme')==='golden', 'menu mode paints the default golden theme');
+  w.eval('openMenuPicker()'); await sleep(20);
+  const themeTab = [...d.querySelectorAll('#mp-tabs button')].find(b=>b.textContent==='Theme');
+  themeTab.click(); await sleep(20);
+  assert(d.querySelectorAll('#modal .thsw').length===5, 'the theme pane offers five swatches');
+  d.querySelector('#modal .thsw[data-th="cassis"]').click(); await sleep(20);
+  assert(w.eval('S.menuTheme')==='cassis' && d.body.getAttribute('data-theme')==='cassis', 'picking a swatch persists and repaints live');
+  assert(d.querySelector('#modal .thsw[data-th="cassis"]').classList.contains('on'), 'the picked swatch is marked');
+  w.eval('closeModal()');
+  await w.fetchWeather(); // repopulate the cache so the payload can carry sunset
+  const pTheme = JSON.parse(w.eval('JSON.stringify(menuPayload())'));
+  assert(pTheme.th==='cassis' && pTheme.su===sunsetMs, 'payload round-trips theme + the host sunset epoch');
+  // sundown: pure model first
+  assert(w.eval('duskNow(100, 50)')===false && w.eval('duskNow(100, 150)')===true, 'duskNow flips at sunset');
+  assert(w.eval('duskNow(100, 100 + 13*3600*1000)')===false, 'and clears before sunrise');
+  assert(w.eval('duskNow(null, 150)')===false, 'no sunset known: dusk never engages');
+  w.eval('updateDusk()'); await sleep(10);
+  assert(d.body.hasAttribute('data-dusk'), 'past the host sunset, the room dims');
+  w.eval('updateDusk('+(sunsetMs-60000)+')'); await sleep(10);
+  assert(!d.body.hasAttribute('data-dusk'), 'before sunset, day variant');
+  // guests: the host's theme, the host's sunset
+  w.eval('setTab("shelf")'); await sleep(20);
+  assert(d.body.getAttribute('data-theme')===null && !d.body.hasAttribute('data-dusk'), 'leaving menu mode clears the paint');
+  w.eval('enterSharedMenu({ t:"X", c:[], s:[], th:"deco", su:'+(Date.now()-3600e3)+' })'); await sleep(30);
+  assert(d.body.getAttribute('data-theme')==='deco' && d.body.hasAttribute('data-dusk'), 'a guest phone wears the host theme and dims at the host sunset');
+  w.eval('sharedMenu.th="vaporwave"; renderMenu();'); await sleep(20);
+  assert(d.body.getAttribute('data-theme')==='golden', 'an unknown theme key falls back to golden');
+  w.eval('sharedMenu.su=Date.now()+3600e3; renderMenu();'); await sleep(20);
+  assert(!d.body.hasAttribute('data-dusk'), 'before the host sunset, guests stay in the day variant');
+  w.eval('delete sharedMenu.su; renderMenu();'); await sleep(20);
+  assert(!d.body.hasAttribute('data-dusk'), 'no sunset in the payload: dusk never engages for guests');
+  w.eval('sharedMenu=null; setTab("shelf");'); await sleep(20);
+  // import: unknown theme falls back
+  const themeBackup = JSON.parse(w.eval('exportJSON()'));
+  themeBackup.menuTheme = 'vaporwave';
+  assert(w.eval('importJSON('+JSON.stringify(JSON.stringify(themeBackup))+')')===null, 'a backup with a bogus theme imports');
+  assert(w.eval('S.menuTheme')==='golden', 'and falls back to golden');
+
   // stop the pollers so node can exit cleanly
-  w.eval('stopBellPoll(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
+  w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
 
   // --- persistence + migration guard ---
   await sleep(600); // let the debounced save flush

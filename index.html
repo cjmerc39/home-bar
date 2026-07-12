@@ -110,10 +110,10 @@ body.menuMode #tabbar,body.menuMode #topbar{display:none}
 .shopline{display:flex;gap:8px;align-items:baseline}
 /* menu */
 #view-menu{padding:34px 8px calc(60px + env(safe-area-inset-bottom));text-align:center}
-#menu-exit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;color:var(--dim);font-size:20px;z-index:7;padding:8px}
-#menu-share{position:fixed;top:calc(12px + env(safe-area-inset-top));left:12px;color:var(--dim);font-size:16px;z-index:7;padding:8px}
-#menu-curate{position:fixed;top:calc(12px + env(safe-area-inset-top));left:52px;color:var(--dim);font-size:16px;z-index:7;padding:8px}
-#menu-reqs{position:fixed;top:calc(12px + env(safe-area-inset-top));left:92px;color:var(--dim);font-size:14px;z-index:7;padding:8px;white-space:nowrap}
+#menu-exit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;color:var(--m-dim,var(--dim));font-size:20px;z-index:7;padding:8px}
+#menu-share{position:fixed;top:calc(12px + env(safe-area-inset-top));left:12px;color:var(--m-dim,var(--dim));font-size:16px;z-index:7;padding:8px}
+#menu-curate{position:fixed;top:calc(12px + env(safe-area-inset-top));left:52px;color:var(--m-dim,var(--dim));font-size:16px;z-index:7;padding:8px}
+#menu-reqs{position:fixed;top:calc(12px + env(safe-area-inset-top));left:92px;color:var(--m-dim,var(--dim));font-size:14px;z-index:7;padding:8px;white-space:nowrap}
 .wthumb{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--line);flex:none}
 .wthumb.big{width:110px;height:110px}
 .wph{width:54px;height:54px;border-radius:8px;border:1px dashed var(--brassdim);display:flex;align-items:center;justify-content:center;color:var(--brassdim);flex:none;font-size:20px}
@@ -123,27 +123,27 @@ body.menuMode #tabbar,body.menuMode #topbar{display:none}
 .suggest{position:absolute;left:0;right:0;top:100%;margin-top:2px;z-index:60;background:var(--bg3);border:1px solid var(--brassdim);border-radius:9px;max-height:190px;overflow-y:auto;box-shadow:0 8px 22px rgba(0,0,0,.5)}
 .sg-item{padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
 .sg-item:last-child{border-bottom:0}
-.msec{display:flex;align-items:center;gap:14px;max-width:420px;margin:48px auto 24px;color:var(--brass2);font-family:var(--serif);font-size:14px;letter-spacing:4px;text-transform:uppercase}
-.msec::before,.msec::after{content:'';flex:1;border-top:1px solid var(--brassdim);opacity:.6}
+.msec{display:flex;align-items:center;gap:14px;max-width:420px;margin:48px auto 24px;color:var(--m-accent,var(--brass2));font-family:var(--serif);font-size:14px;letter-spacing:4px;text-transform:uppercase}
+.msec::before,.msec::after{content:'';flex:1;border-top:1px solid var(--m-rule,var(--brassdim));opacity:.6}
 .aibox{background:var(--bg3);border:1px dashed var(--brassdim);border-radius:10px;padding:10px;margin:10px 0 2px}
 .aibox .ttl{color:var(--brass2);font-size:13px;letter-spacing:.6px;margin-bottom:6px}
-.menu-head{font-family:var(--serif);font-size:38px;color:var(--brass2);letter-spacing:1px}
-.menu-rule{width:74px;margin:14px auto 8px;border:0;border-top:1px solid var(--brassdim)}
-.menu-sub{font-size:11px;letter-spacing:3.5px;text-transform:uppercase;color:var(--dim);margin-bottom:30px}
+.menu-head{font-family:var(--serif);font-size:38px;color:var(--m-accent,var(--brass2));letter-spacing:1px}
+.menu-rule{width:74px;margin:14px auto 8px;border:0;border-top:1px solid var(--m-rule,var(--brassdim))}
+.menu-sub{font-size:11px;letter-spacing:3.5px;text-transform:uppercase;color:var(--m-dim,var(--dim));margin-bottom:30px}
 .mitem{margin:0 auto 26px;max-width:440px}
-.mitem .mname{font-family:var(--serif);font-size:23px;color:var(--ink)}
-.mitem .mdesc{font-family:var(--serif);font-style:italic;font-size:14.5px;color:var(--mut);margin-top:4px}
+.mitem .mname{font-family:var(--serif);font-size:23px;color:var(--m-ink,var(--ink))}
+.mitem .mdesc{font-family:var(--serif);font-style:italic;font-size:14.5px;color:var(--m-mut,var(--mut));margin-top:4px}
 .mitem .housestar{margin-right:6px}
-.mcat{font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--brass2);margin:20px 0 12px}
-.mitem.feature{border:1px solid var(--brassdim);border-radius:12px;padding:18px 20px;max-width:420px}
+.mcat{font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--m-accent,var(--brass2));margin:20px 0 12px}
+.mitem.feature{border:1px solid var(--m-rule,var(--brassdim));border-radius:12px;padding:18px 20px;max-width:420px}
 .mitem.feature .mname{font-size:27px}
 .mname.dead{text-decoration:line-through;opacity:.55}
 .chip86{font-size:10px;letter-spacing:2px;color:var(--low);border:1px solid var(--low);border-radius:99px;padding:2px 8px;margin-left:8px;text-transform:uppercase;vertical-align:middle;text-decoration:none;display:inline-block}
 .prow{display:flex;align-items:baseline;gap:8px;max-width:400px;margin:0 auto 10px;text-align:left}
-.prow .pn{font-family:var(--serif);font-size:17px}
-.prow .dots{flex:1;border-bottom:1px dotted var(--brassdim);transform:translateY(-4px);min-width:24px}
-.prow .pt{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--mut)}
-#menu-empty{color:var(--dim);font-family:var(--serif);font-style:italic;margin-top:60px}
+.prow .pn{font-family:var(--serif);font-size:17px;color:var(--m-ink,var(--ink))}
+.prow .dots{flex:1;border-bottom:1px dotted var(--m-rule,var(--brassdim));transform:translateY(-4px);min-width:24px}
+.prow .pt{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--m-mut,var(--mut))}
+#menu-empty{color:var(--m-dim,var(--dim));font-family:var(--serif);font-style:italic;margin-top:60px}
 /* modal */
 #modalwrap{position:fixed;inset:0;z-index:20;display:none;background:rgba(10,7,5,.7);align-items:flex-end;justify-content:center}
 #modalwrap.on{display:flex}
@@ -223,6 +223,56 @@ span.scanthumb{display:block;background:var(--bg2)}
 .li-target{stroke:var(--brassdim);stroke-dasharray:2 3}
 #li-cursor{stroke:var(--brass2);stroke-width:1}
 #li-verdict{font-family:var(--serif);color:var(--brass2);font-size:15.5px;margin:9px 0 3px}
+/* the drink render (recipe detail only) */
+.drinkrender{flex:none}
+.dr-glass{fill:rgba(241,230,208,.05);stroke:var(--mut);stroke-width:1.4;stroke-linejoin:round}
+.dr-chrome{fill:none;stroke:var(--mut);stroke-width:1.4;stroke-linecap:round}
+.dr-float{stroke:rgba(0,0,0,.25);stroke-width:.4}
+.dr-foam{fill:rgba(246,243,236,.75)}
+.dr-ice{fill:rgba(255,255,255,.10);stroke:rgba(255,255,255,.38);stroke-width:.9}
+.dr-verdict{font-family:var(--serif);color:var(--brass2);font-size:14px;margin-top:5px}
+/* weather ambient line */
+#wx-line{letter-spacing:.4px;margin:6px 2px 8px}
+/* menu themes: the admin app stays walnut forever; Menu Mode consumes --m-* vars
+   whose golden defaults equal today's values exactly */
+body.menuMode{--m-bg:var(--bg);--m-ink:var(--ink);--m-mut:var(--mut);--m-dim:var(--dim);--m-accent:var(--brass2);--m-rule:var(--brassdim);--m-vig:1;background:var(--m-bg)}
+body.menuMode::before{opacity:var(--m-vig)}
+body.menuMode #view-menu{color:var(--m-ink)}
+body.menuMode .housestar{color:var(--m-accent)}
+body.menuMode .chip86{color:var(--low)}
+/* m-anim arms a beat after entering menu mode, so theme picks and the sundown
+   flip glide (~8s, the room dims) while tab entry stays instant */
+body.menuMode.m-anim{transition:background-color 8s ease}
+body.menuMode.m-anim::before{transition:opacity 8s ease}
+body.menuMode.m-anim #view-menu, body.menuMode.m-anim #view-menu *{transition:color 8s ease,border-color 8s ease}
+/* golden hour: today's walnut; dusk deepens a step, accent warms */
+body.menuMode[data-theme="golden"][data-dusk]{--m-bg:#140f0b;--m-accent:#e6c689}
+/* midnight deco */
+body.menuMode[data-theme="deco"]{--m-bg:#0b0b0d;--m-ink:#e8dcc0;--m-mut:#b0a488;--m-dim:#6e6752;--m-accent:#d4b96a;--m-rule:#8a7a4e;--m-vig:.45}
+body.menuMode[data-theme="deco"][data-dusk]{--m-bg:#070708;--m-accent:#b3985a}
+body.menuMode[data-theme="deco"] .msec::before,body.menuMode[data-theme="deco"] .msec::after{border-top:3px double var(--m-rule)}
+body.menuMode[data-theme="deco"] .menu-rule{border-top:3px double var(--m-rule)}
+/* bistro blanc: the lone light theme, and the print face */
+body.menuMode[data-theme="blanc"]{--m-bg:#f4ecdc;--m-ink:#221d17;--m-mut:#5c5344;--m-dim:#8a7d68;--m-accent:#7a5c2e;--m-rule:#b9a888;--m-vig:0}
+body.menuMode[data-theme="blanc"][data-dusk]{--m-bg:#ead9bd;--m-ink:#2a2118}
+/* cassis: wine-dark and candlelit — antique gold, never silver */
+body.menuMode[data-theme="cassis"]{--m-bg:#241a2b;--m-ink:#c9b8d4;--m-mut:#a795b8;--m-dim:#7c6d8c;--m-accent:#c2a35c;--m-rule:#6f5f7e;--m-vig:.8}
+body.menuMode[data-theme="cassis"][data-dusk]{--m-bg:#1b1322;--m-ink:#b3a3c0;--m-mut:#998aa8}
+/* nochebuena: pine, gold, oxblood rules — one drink, one season */
+body.menuMode[data-theme="nochebuena"]{--m-bg:#12211a;--m-ink:#f1e6d0;--m-mut:#c3b49a;--m-dim:#7f8b7a;--m-accent:#cfa54b;--m-rule:#7e2f33;--m-vig:.7}
+body.menuMode[data-theme="nochebuena"][data-dusk]{--m-bg:#0c1812;--m-accent:#c1963f}
+/* theme swatches in the curate sheet */
+.thsw{display:block;width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;text-align:left}
+.thsw.on{outline:2px solid var(--brass)}
+.thsw .thname{font-family:var(--serif);font-size:17px}
+.thsw .thtag{display:block;border-top:1px solid;margin-top:6px;padding-top:5px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase}
+/* printing Menu Mode always yields Bistro Blanc on paper, chrome-free */
+@media print{
+  body.menuMode{--m-bg:#fff !important;--m-ink:#221d17 !important;--m-mut:#5c5344 !important;--m-dim:#8a7d68 !important;--m-accent:#7a5c2e !important;--m-rule:#b9a888 !important;background:#fff !important}
+  body.menuMode::before{display:none !important}
+  body.menuMode #menu-exit,body.menuMode #menu-share,body.menuMode #menu-curate,body.menuMode #menu-reqs,body.menuMode #toast{display:none !important}
+  body.menuMode,body.menuMode main{overflow:visible !important;height:auto !important}
+}
 </style>
 </head>
 <body>
@@ -264,6 +314,7 @@ span.scanthumb{display:block;background:var(--bg2)}
   </section>
 
   <section id="view-tonight" class="view">
+    <div id="wx-line" class="small dim hidden"></div>
     <div class="card hidden" id="bartender-box">
       <b>Ask the bartender</b>
       <div class="small mut" style="margin-bottom:8px">What should I make tonight?</div>
@@ -439,7 +490,7 @@ function seedRecipes(){
     R('r17','Mai Tai','shake','rocks','mint + spent lime shell','',[
       ING('2','oz',T('rum','aged')), ING('0.75','oz',ST('lime')), ING('0.5','oz',T('liqueur','orange')), ING('0.5','oz',T('mixer','orgeat'))]),
     R('r18',"Dark 'n Stormy",'build','highball','lime wedge','Goslings Black Seal is traditional.',[
-      ING('2','oz',T('rum','dark')), ING('0.5','oz',ST('lime')), ING('4','oz',T('mixer','ginger beer'))]),
+      ING('2','oz',T('rum','dark'),'float'), ING('0.5','oz',ST('lime')), ING('4','oz',T('mixer','ginger beer'))]),
     R('r19','Jungle Bird','shake','rocks','pineapple frond','Blackstrap rum if you have it.',[
       ING('1.5','oz',T('rum','dark')), ING('0.75','oz',T('amaro','campari')), ING('1.5','oz',T('mixer','pineapple juice')), ING('0.5','oz',ST('lime')), ING('0.5','oz',ST('simple syrup'))]),
     R('r20','Piña Colada','blend','hurricane','pineapple + cherry','',[
@@ -447,7 +498,7 @@ function seedRecipes(){
     R('r21','Hemingway Daiquiri','shake','coupe','lime wheel','',[
       ING('2','oz',T('rum','white')), ING('0.75','oz',ST('lime')), ING('0.5','oz',T('mixer','grapefruit juice')), ING('0.5','oz',T('liqueur','maraschino'))]),
     R('r22',"Corn 'n Oil",'build','rocks','lime wedge','Blackstrap rum is traditional.',[
-      ING('2','oz',T('rum','aged')), ING('0.5','oz',T('liqueur','falernum')), ING('0.5','oz',ST('lime')), ING('2','dash',T('bitters','aromatic'))]),
+      ING('2','oz',T('rum','aged'),'float'), ING('0.5','oz',T('liqueur','falernum')), ING('0.5','oz',ST('lime')), ING('2','dash',T('bitters','aromatic'))]),
     R('r23','Negroni','stir','rocks','orange slice','Equal parts. Big cube.',[
       ING('1','oz',T('gin')), ING('1','oz',T('amaro','campari')), ING('1','oz',T('vermouth','sweet'))]),
     R('r24','Martini','stir','coupe','lemon twist or olive','Adjust vermouth to taste; stir very cold.',[
@@ -479,7 +530,15 @@ function seedRecipes(){
 
 /* ============================== state ============================== */
 let S = null;
-function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[], menuId:null, menuOwner:null, savedAt:0, shelfView:'list', specsView:'list', nerdMode:false }; }
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[], menuId:null, menuOwner:null, savedAt:0, shelfView:'list', specsView:'list', nerdMode:false, menuTheme:'golden', geo:null, geoAsked:false }; }
+const THEME_KEYS = ['golden','deco','blanc','cassis','nochebuena'];
+function validTheme(t){ return THEME_KEYS.includes(t) ? t : 'golden'; }
+// geo is rounded to 2 decimals (~1km) before it ever lands in state — the weather
+// doesn't need more and a backup file shouldn't carry a precise home address
+function cleanGeo(g){
+  if(!g || typeof g.lat !== 'number' || typeof g.lon !== 'number' || !isFinite(g.lat) || !isFinite(g.lon)) return null;
+  return { lat: Math.round(g.lat*100)/100, lon: Math.round(g.lon*100)/100 };
+}
 function load(){
   let raw = null;
   try{ raw = localStorage.getItem(KEY); }catch(e){}
@@ -510,6 +569,9 @@ function load(){
   if(d.specsView !== 'sky') d.specsView = 'list';
   d.nerdMode = d.nerdMode === true;
   backfillFlavors(d.recipes);
+  d.menuTheme = validTheme(d.menuTheme);
+  d.geo = cleanGeo(d.geo);
+  d.geoAsked = d.geoAsked === true;
   return d;
 }
 let _saveT = null, storageFull = false;
@@ -843,6 +905,232 @@ function liServe(method){ // seconds until within 0.5°C of the method's equilib
 }
 function fmtTemp(t){ const v = Math.round(t*2)/2; return (v < 0 ? '−' : '') + Math.abs(v) + '°C'; }
 
+/* ============================== the drink render ============================== */
+// Color is computed, never picked: each ingredient is a pigment with an RGB and a
+// strength (how hard it dyes the glass — clear spirits dilute, Campari dominates).
+// Hand-tuned against the seeded classics; flags: cloud (citrus haze when shaken),
+// opaque (cream/egg/coconut/milk push the drink opaque and pale), foam (head hint).
+const PIGMENTS = [ // ['category' or 'category/subtype', [r,g,b], strength, flag?] — first match wins
+  ['amaro/campari',[186,32,38],.9], ['amaro/aperol',[233,88,41],.85], ['amaro/fernet',[62,72,46],.8],
+  ['amaro',[122,68,30],.8],
+  ['bitters/peychauds',[190,40,50],.9], ['bitters',[135,52,28],.85],
+  ['liqueur/coffee',[24,14,10],.95], ['liqueur/green chartreuse',[108,158,62],.8],
+  ['liqueur/yellow chartreuse',[212,178,66],.8], ['liqueur/orange',[224,158,74],.5],
+  ['liqueur/maraschino',[238,234,222],.15], ['liqueur/amaretto',[158,88,42],.7],
+  ['liqueur/falernum',[228,206,148],.4], ['liqueur/absinthe',[152,188,118],.6],
+  ['liqueur/elderflower',[236,232,214],.15], ['liqueur',[210,180,120],.4],
+  ['whiskey',[186,116,38],.7],
+  ['rum/white',[236,231,216],.08], ['rum/overproof',[160,100,40],.6], ['rum',[158,94,36],.65],
+  ['brandy',[172,102,44],.7],
+  ['tequila/reposado',[214,182,120],.35], ['tequila/anejo',[196,150,80],.5],
+  ['tequila',[238,234,222],.08], ['mezcal',[238,234,222],.08],
+  ['gin',[240,238,228],.06], ['vodka',[240,238,230],.05],
+  ['vermouth/sweet',[142,74,38],.6], ['vermouth',[236,231,214],.15],
+  ['wine/sparkling',[240,224,168],.3], ['wine/red',[112,30,46],.8], ['wine',[226,210,160],.4],
+  ['mixer/soda water',[232,236,236],.05], ['mixer/tonic',[234,238,236],.06],
+  ['mixer/ginger beer',[222,190,118],.35], ['mixer/cola',[58,36,26],.8],
+  ['mixer/grapefruit soda',[242,198,188],.3], ['mixer/pineapple juice',[236,200,88],.55],
+  ['mixer/grapefruit juice',[238,188,158],.45], ['mixer/orgeat',[238,228,208],.5,'opaque'],
+  ['mixer',[232,232,226],.15],
+  ['milk',[246,243,236],.7,'opaque'], ['spice',[200,160,110],.2],
+];
+const STAPLE_PIGMENTS = {
+  lime:[[214,222,164],.35,'cloud'], lemon:[[234,222,150],.35,'cloud'],
+  'simple syrup':[[238,230,196],.2], sugar:[[240,236,220],.12], honey:[[224,178,92],.45],
+  'agave syrup':[[226,198,134],.4], espresso:[[22,13,9],.95,'foam'],
+  'egg white':[[242,240,234],.25,'opaque foam'], cream:[[248,246,240],.7,'opaque'],
+  'coconut cream':[[247,244,236],.75,'opaque'], mint:[[150,190,130],.2], salt:[[240,240,240],.05],
+};
+function pigmentOf(req){ // -> { rgb, s, flag }
+  if(!req) return { rgb:[235,230,215], s:.15, flag:'' };
+  if(req.staple){
+    const p = STAPLE_PIGMENTS[norm(req.staple)];
+    return p ? { rgb:p[0], s:p[1], flag:p[2]||'' } : { rgb:[235,230,215], s:.15, flag:'' };
+  }
+  let cat=null, sub='';
+  if(req.tag){ cat = norm(req.tag.category); sub = norm(req.tag.subtype||''); }
+  else if(req.bottleId){ const b = S.bottles.find(x => x.id === req.bottleId); if(b){ cat = norm(b.category); sub = norm(b.subtype||''); } }
+  if(!cat) return { rgb:[235,230,215], s:.15, flag:'' };
+  for(const [k, rgb, s, flag] of PIGMENTS){
+    const i = k.indexOf('/');
+    if(i < 0 ? k === cat : (k.slice(0,i) === cat && k.slice(i+1) === sub))
+      return { rgb, s, flag: flag||'' };
+  }
+  return { rgb:[235,230,215], s:.15, flag:'' };
+}
+const OPAQUE_SHARE = 0.12; // volume share of cream/egg/coconut/milk that flips the drink opaque
+function mixRgb(a, b, t){ return [0,1,2].map(i => Math.round(a[i] + (b[i]-a[i])*t)); }
+function colorOf(r){ // -> { color:'rgb(..)', r, g, b, opacity } — deterministic
+  let sw=0, acc=[0,0,0], cloud=0, opaque=0, foam=false, total=0;
+  for(const ing of (r && r.ingredients) || []){
+    const p = pigmentOf(ing.req);
+    if(p.flag.includes('foam')) foam = true; // a head hint is binary — egg white is a zero-volume 'whole'
+    const v = ingVolOz(ing); if(v <= 0) continue;
+    total += v; sw += v*p.s;
+    for(let i=0;i<3;i++) acc[i] += v*p.s*p.rgb[i];
+    if(p.flag.includes('cloud')) cloud += v;
+    if(p.flag.includes('opaque')) opaque += v;
+  }
+  if(!total || !sw) return { color:'rgb(236,231,216)', r:236, g:231, b:216, opacity:.55, foam:false };
+  let rgb = acc.map(x => x/sw);
+  let opacity;
+  const oShare = opaque/total;
+  if(oShare >= OPAQUE_SHARE){ // cream pushes the whole glass opaque and pale
+    rgb = mixRgb(rgb, [246,243,235], Math.min(1, oShare*2.4)*.75);
+    opacity = .95;
+  } else if(cloud > 0 && r.method === 'shake'){ // the citrus shake-cloud
+    rgb = mixRgb(rgb, [245,242,232], .15);
+    opacity = .8;
+  } else if(r.method === 'stir' || r.method === 'build'){
+    opacity = .62; // translucent and jewel-like
+  } else opacity = .72;
+  rgb = rgb.map(Math.round);
+  return { color:'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')', r:rgb[0], g:rgb[1], b:rgb[2], opacity, foam: foam && r.method === 'shake' };
+}
+// Specific gravity: ethanol lightens, sugar weighs. The exact coefficients matter
+// less than the ordering being right (a 1:1 syrup must sink under neat spirit).
+const SG_K_SUGAR = 0.0040;   // SG per g sugar / 100ml (sucrose ≈ 0.0039)
+const SG_K_ABV = 0.0013;     // SG per ABV point (40% spirit ≈ 0.948, matches reality)
+const FLOAT_MARGIN = 0.008;  // lighter than the body by at least this, or it marbles
+const SUGAR_STAPLES = { 'simple syrup':50, sugar:50, honey:55, 'agave syrup':52, lime:1.5, lemon:1.5,
+  espresso:0, 'egg white':0, cream:3, 'coconut cream':12 };
+const SUGAR_TAGS = [ // same first-match convention as PIGMENTS, g sugar / 100ml
+  ['liqueur/falernum',30], ['liqueur',25], ['amaro',18],
+  ['vermouth/sweet',13], ['vermouth',3], ['wine/sparkling',1], ['wine',1], ['bitters',5],
+  ['mixer/soda water',0], ['mixer/tonic',9], ['mixer/ginger beer',10], ['mixer/cola',11],
+  ['mixer/grapefruit soda',10], ['mixer/pineapple juice',10], ['mixer/grapefruit juice',8],
+  ['mixer/orgeat',40], ['mixer',5], ['milk',5],
+];
+function sugarOf(req){
+  if(!req) return 2;
+  if(req.staple){ const s = SUGAR_STAPLES[norm(req.staple)]; return s == null ? 2 : s; }
+  let cat=null, sub='';
+  if(req.tag){ cat = norm(req.tag.category); sub = norm(req.tag.subtype||''); }
+  else if(req.bottleId){ const b = S.bottles.find(x => x.id === req.bottleId); if(b){ cat = norm(b.category); sub = norm(b.subtype||''); } }
+  if(!cat) return 2;
+  for(const [k, g] of SUGAR_TAGS){
+    const i = k.indexOf('/');
+    if(i < 0 ? k === cat : (k.slice(0,i) === cat && k.slice(i+1) === sub)) return g;
+  }
+  return 0; // spirits
+}
+function sgOf(ing){ return 1 + SG_K_SUGAR*sugarOf(ing.req) - SG_K_ABV*(ingAbv(ing.req)*100); }
+function isFloatCand(ing){ return norm(ing.note||'').includes('float') || ing.unit === 'top'; }
+function floatVerdict(r){ // null when there's nothing floated or nothing to float on
+  const ings = (r && r.ingredients) || [];
+  const cand = ings.find(isFloatCand);
+  if(!cand) return null;
+  let bodyV = 0, bodySG = 0;
+  for(const i of ings){
+    if(i === cand) continue;
+    const v = ingVolOz(i); if(v <= 0) continue;
+    bodyV += v; bodySG += v*sgOf(i);
+  }
+  if(!bodyV) return null;
+  bodySG /= bodyV;
+  const candSG = sgOf(cand);
+  const holds = candSG < bodySG - FLOAT_MARGIN;
+  return { holds, candSG, bodySG,
+    text: holds ? 'The float holds — pour it over a bar spoon.' : 'That pour sinks and marbles in.' };
+}
+// Glassware: hand-tuned outlines in a 64×64 box. `bowl` is a closed path (also the
+// liquid clip), `chrome` is stem/foot stroke, `top`/`bot` bound the liquid,
+// lip{X0,X1,Y} is where rims and garnishes live.
+const GLASSES = {
+  coupe:    { key:'coupe',    bowl:'M12 12 H52 C52 24 44 30 32 30 C20 30 12 24 12 12 Z', chrome:'M32 30 L32 50 M20 52 H44', top:15, bot:30, lipX0:12, lipX1:52, lipY:12 },
+  martini:  { key:'martini',  bowl:'M10 12 H54 L32 33 Z', chrome:'M32 33 L32 50 M20 52 H44', top:15, bot:33, lipX0:10, lipX1:54, lipY:12 },
+  rocks:    { key:'rocks',    bowl:'M16 16 H48 V50 Q48 54 44 54 H20 Q16 54 16 50 Z', chrome:'', top:22, bot:54, lipX0:16, lipX1:48, lipY:16 },
+  highball: { key:'highball', bowl:'M20 8 H44 V50 Q44 54 40 54 H24 Q20 54 20 50 Z', chrome:'', top:14, bot:54, lipX0:20, lipX1:44, lipY:8 },
+  flute:    { key:'flute',    bowl:'M26 6 H38 V28 C38 34 34 36 32 36 C30 36 26 34 26 28 Z', chrome:'M32 36 L32 50 M22 52 H42', top:10, bot:36, lipX0:26, lipX1:38, lipY:6 },
+  wine:     { key:'wine',     bowl:'M20 10 H44 C44 24 40 30 32 31 C24 30 20 24 20 10 Z', chrome:'M32 31 L32 50 M22 52 H42', top:14, bot:31, lipX0:20, lipX1:44, lipY:10 },
+  hurricane:{ key:'hurricane',bowl:'M22 6 H42 C41 13 44 19 44 28 C44 39 39 46 32 46 C25 46 20 39 20 28 C20 19 23 13 22 6 Z', chrome:'M32 46 L32 52 M24 54 H40', top:10, bot:46, lipX0:22, lipX1:42, lipY:6 },
+};
+function glassFor(text){
+  const t = norm(text);
+  if(t.includes('coupe')) return GLASSES.coupe;
+  if(t.includes('martini')) return GLASSES.martini;
+  if(t.includes('flute')) return GLASSES.flute;
+  if(t.includes('hurricane')) return GLASSES.hurricane;
+  if(t.includes('wine')) return GLASSES.wine;
+  if(t.includes('highball') || t.includes('collins')) return GLASSES.highball;
+  return GLASSES.rocks; // rocks / old fashioned / anything else
+}
+const CITRUS_RGB = { lime:[176,198,88], lemon:[234,214,80], orange:[240,158,54], grapefruit:[240,170,140] };
+function garnishGlyphs(r, g){
+  const t = norm(r.garnish), out = [];
+  const citrus = ['lime','lemon','orange','grapefruit'].find(c => t.includes(c));
+  const cRgb = citrus ? CITRUS_RGB[citrus] : CITRUS_RGB.lemon;
+  const cx = g.lipX1 - 3, cy = g.lipY;
+  if(citrus && t.includes('twist'))
+    out.push('<path class="dr-garnish" d="M', cx-2, ' ', cy, ' q4 3 1 7 q-3 4 1 7" fill="none" stroke="rgb(', cRgb, ')" stroke-width="2" stroke-linecap="round"/>');
+  else if(citrus)
+    out.push('<g class="dr-garnish"><circle cx="', cx, '" cy="', cy, '" r="4.6" fill="rgb(', cRgb, ')" stroke="rgba(0,0,0,.35)" stroke-width=".8"/>',
+      '<line x1="', cx, '" y1="', cy-4.6, '" x2="', cx, '" y2="', cy+4.6, '" stroke="rgba(255,255,255,.55)" stroke-width=".8"/></g>');
+  if(t.includes('cherry'))
+    out.push('<circle class="dr-garnish" cx="', cx-9, '" cy="', cy+1.5, '" r="2.8" fill="#7e2f33"/>');
+  if(t.includes('mint'))
+    out.push('<g class="dr-garnish" fill="rgb(110,160,90)"><ellipse cx="', cx-1, '" cy="', cy-4, '" rx="2.2" ry="4" transform="rotate(-24 ', cx-1, ' ', cy-4, ')"/>',
+      '<ellipse cx="', cx+3, '" cy="', cy-3, '" rx="2" ry="3.6" transform="rotate(26 ', cx+3, ' ', cy-3, ')"/></g>');
+  if(t.includes('salt')){
+    const ticks = [];
+    for(let i=0;i<=4;i++){ const x = g.lipX0 + (g.lipX1-g.lipX0)*i/4; ticks.push('M', x, ' ', g.lipY-2.6, ' L', x, ' ', g.lipY-0.6, ' '); }
+    out.push('<path class="dr-garnish" d="', ticks.join(''), '" stroke="rgba(241,230,208,.8)" stroke-width="1.1"/>');
+  }
+  return out.join('');
+}
+function drinkSvg(r){
+  const g = glassFor(r.glass);
+  const col = colorOf(r);
+  const clip = 'dg-' + r.id;
+  const H = g.bot - g.top;
+  const h = ['<svg class="drinkrender" viewBox="0 0 64 64" width="72" height="72" aria-hidden="true">',
+    '<clipPath id="', clip, '"><path d="', g.bowl, '"/></clipPath>',
+    '<g clip-path="url(#', clip, ')">'];
+  const fv = floatVerdict(r);
+  const floatIng = fv && fv.holds ? r.ingredients.find(isFloatCand) : null;
+  if(r.method === 'build'){
+    // an unstirred build really does sit in layers: heavy at the bottom
+    const body = r.ingredients.filter(i => ingVolOz(i) > 0 && i !== floatIng)
+      .map(i => ({ v: ingVolOz(i), sg: sgOf(i), p: pigmentOf(i.req) }))
+      .sort((a,z) => z.sg - a.sg);
+    const totV = body.reduce((a,x) => a + x.v, 0) || 1;
+    let y = g.bot;
+    for(const b of body){
+      const bh = H * (b.v/totV);
+      y -= bh;
+      h.push('<rect class="dr-band" data-sg="', Math.round(b.sg*1000)/1000, '" x="0" y="', Math.round(y*10)/10,
+        '" width="64" height="', Math.round(bh*10)/10 + 0.3, '" fill="rgb(', b.p.rgb, ')" opacity=".8"/>');
+    }
+  } else {
+    const lighten = r.method === 'blend' ? .35 : 0; // slush reads paler and flat-topped
+    const rgb = lighten ? mixRgb([col.r,col.g,col.b], [250,248,242], lighten) : [col.r,col.g,col.b];
+    h.push('<rect class="dr-liquid" x="0" y="', g.top, '" width="64" height="', H,
+      '" fill="rgb(', rgb, ')" opacity="', r.method === 'blend' ? .95 : col.opacity, '"/>');
+    if(r.method === 'blend')
+      h.push('<circle cx="24" cy="', g.top+5, '" r="1.1" fill="rgba(255,255,255,.4)"/><circle cx="34" cy="', g.top+9, '" r="1" fill="rgba(255,255,255,.32)"/><circle cx="42" cy="', g.top+4, '" r="1" fill="rgba(255,255,255,.36)"/>');
+  }
+  if(floatIng) // the float that holds: a distinct band riding on top
+    h.push('<rect class="dr-float" x="0" y="', g.top, '" width="64" height="', Math.max(3.5, H*0.14),
+      '" fill="rgb(', pigmentOf(floatIng.req).rgb, ')" opacity=".9"/>');
+  if(col.foam && !floatIng && r.method !== 'build')
+    h.push('<rect class="dr-foam" x="0" y="', g.top, '" width="64" height="3.6"/>');
+  // ice: method + glass decide
+  if(r.method !== 'blend'){
+    if(g.key === 'rocks')
+      h.push('<rect class="dr-ice" x="23" y="', g.top+4, '" width="17" height="17" rx="2.5" transform="rotate(7 32 ', g.top+12, ')"/>');
+    else if(g.key === 'highball' && r.method === 'build')
+      h.push('<rect class="dr-ice" x="24" y="', g.top+3, '" width="11" height="11" rx="2" transform="rotate(9 30 ', g.top+8, ')"/>',
+        '<rect class="dr-ice" x="28" y="', g.top+15, '" width="11" height="11" rx="2" transform="rotate(-8 34 ', g.top+20, ')"/>',
+        '<rect class="dr-ice" x="23" y="', g.top+27, '" width="11" height="11" rx="2" transform="rotate(5 29 ', g.top+32, ')"/>');
+  }
+  h.push('</g>');
+  h.push('<path class="dr-glass" d="', g.bowl, '"/>');
+  if(g.chrome) h.push('<path class="dr-chrome" d="', g.chrome, '"/>');
+  h.push(garnishGlyphs(r, g));
+  h.push('</svg>');
+  return h.join('');
+}
+
 /* ============================== wishlist ============================== */
 function upsertWish(wi){
   if(!wi.id) wi.id = uid('w');
@@ -918,6 +1206,9 @@ function importJSON(text){
   if(d.specsView !== 'sky') d.specsView = 'list';
   d.nerdMode = d.nerdMode === true;
   backfillFlavors(d.recipes);
+  d.menuTheme = validTheme(d.menuTheme);
+  d.geo = cleanGeo(d.geo);
+  d.geoAsked = d.geoAsked === true;
   S = d; save(); renderAll(); return null;
 }
 function downloadBackup(){
@@ -1237,19 +1528,73 @@ async function aiDraft(payload){
   }
 }
 
+/* ============================== weather ============================== */
+// One open-meteo call (free, no key) for current conditions + today's sunset,
+// cached in memory for 30 minutes. No geo, denied permission, or a dead fetch:
+// everything downstream silently behaves exactly as before — it's a nicety.
+const WX_TTL = 30*60*1000;
+let _wx = { at:0, data:null };
+const WMO_CONDITIONS = [[0,'clear'],[2,'fair'],[3,'cloudy'],[48,'foggy'],[57,'drizzly'],[67,'rainy'],[77,'snowy'],[82,'showery'],[86,'snowy'],[99,'stormy']];
+function wxCondition(code){ for(const [max,name] of WMO_CONDITIONS) if(code <= max) return name; return 'mild'; }
+async function fetchWeather(){
+  if(!S.geo) return null;
+  if(_wx.data && Date.now() - _wx.at < WX_TTL) return _wx.data;
+  try{
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + S.geo.lat + '&longitude=' + S.geo.lon +
+      '&current=temperature_2m,relative_humidity_2m,weather_code&daily=sunset&forecast_days=1&timezone=auto&timeformat=unixtime&temperature_unit=fahrenheit');
+    const j = await r.json();
+    const cur = j && j.current;
+    if(!r.ok || !cur || typeof cur.temperature_2m !== 'number') return null;
+    const sunset = j.daily && Array.isArray(j.daily.sunset) && typeof j.daily.sunset[0] === 'number' ? j.daily.sunset[0]*1000 : null;
+    _wx = { at: Date.now(), data: {
+      temp: cur.temperature_2m,
+      humidity: typeof cur.relative_humidity_2m === 'number' ? cur.relative_humidity_2m : null,
+      condition: wxCondition(cur.weather_code|0),
+      sunsetAt: sunset } };
+    return _wx.data;
+  }catch(e){ return null; }
+}
+function wxLineText(wx){ return Math.round(wx.temp) + '° and ' + ((wx.humidity != null && wx.humidity >= 70) ? 'humid' : wx.condition); }
+function isEveningNow(wx){ return wx.sunsetAt ? Date.now() >= wx.sunsetAt : new Date().getHours() >= 18; }
+function setGeo(lat, lon){
+  S.geo = cleanGeo({ lat, lon });
+  _wx = { at:0, data:null };
+  save();
+}
+function openGeoAsk(){ // once, on first bartender use — never on boot, never re-nagged
+  S.geoAsked = true; save();
+  openModal('<h2>Weather-aware picks?</h2>' +
+    '<div class="small mut" style="margin:6px 0 14px">Share a rough location — rounded to about a kilometer and kept on this phone — and the bartender can lean with tonight&rsquo;s weather.</div>' +
+    '<div style="display:flex;gap:8px;flex-direction:column">' +
+    '<button class="abtn" id="geo-yes">Use my rough location</button>' +
+    '<button class="abtn ghost" id="geo-no">Not now</button></div>');
+  document.getElementById('geo-yes').onclick = () => {
+    navigator.geolocation.getCurrentPosition(
+      pos => { setGeo(pos.coords.latitude, pos.coords.longitude); askBartender(); },
+      () => askBartender(),
+      { maximumAge: 600000, timeout: 8000 });
+  };
+  document.getElementById('geo-no').onclick = () => askBartender();
+}
+
 /* ============================== AI bartender ============================== */
 async function requestBartender(mood){
   const drinks = S.recipes.filter(r => recipeStatus(r).makeable).map(r => ({
     name: r.name, base: recipeBase(r), rating: r.rating||0, house: !!r.house,
     low: recipeStatus(r).low, ingredients: autoDesc(r),
   }));
+  const body = { mood: mood||'', drinks }; // without weather this is byte-identical to before
+  const wx = await fetchWeather();
+  if(wx) body.weather = { temp: Math.round(wx.temp), humidity: wx.humidity == null ? 0 : Math.round(wx.humidity),
+    condition: wx.condition, isEvening: isEveningNow(wx) };
   const r = await fetch(CFG.bartenderUrl, { method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ mood: mood||'', drinks }) });
+    body: JSON.stringify(body) });
   const j = await r.json().catch(()=>null);
   if(!r.ok || !j || j.error || !Array.isArray(j.picks)) throw new Error((j && j.error) || 'bartender failed');
   return j.picks;
 }
 async function askBartender(){
+  if(!S.geo && !S.geoAsked && navigator.geolocation){ openGeoAsk(); return; }
   const mood = document.getElementById('bt-mood').value.trim();
   openModal('<h2>Consulting the bartender&hellip;</h2><div class="small mut">Eyeing the shelf, weighing the mood.</div><div class="spin"></div>');
   try{
@@ -1346,6 +1691,7 @@ function setTab(t){
   document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   document.querySelectorAll('section.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + t));
   document.body.classList.toggle('menuMode', t === 'menu');
+  if(t === 'menu') startDusk(); else stopDusk();
   renderAll();
   if(t === 'menu' && !sharedMenu) startBellPoll(); else stopBellPoll();
   try{ const sc = document.querySelector('main'); if(sc && sc.scrollTo) sc.scrollTo(0,0); }catch(e){}
@@ -1549,6 +1895,11 @@ function renderSpecsSky(list){
   list.querySelectorAll('#galaxy .star').forEach(g => g.addEventListener('click', () => openRecipeDetail(g.getAttribute('data-id'))));
 }
 function renderTonight(){
+  const wxEl = document.getElementById('wx-line');
+  wxEl.classList.add('hidden');
+  if(S.geo) fetchWeather().then(wx => { // one dim ambient line, nothing more
+    if(wx && tab === 'tonight'){ wxEl.textContent = wxLineText(wx); wxEl.classList.remove('hidden'); }
+  });
   document.getElementById('bartender-box').classList.toggle('hidden',
     !CFG.bartenderUrl || !S.recipes.some(r => recipeStatus(r).makeable));
   const mk = [], lows = [];
@@ -1598,6 +1949,42 @@ function renderWishlist(){
   wishEl.querySelectorAll('.wish').forEach(el => el.addEventListener('click', () => openWishForm(el.dataset.id)));
 }
 let sharedMenu = null; // payload from a shared link (read-only guest view)
+
+/* ============================== menu themes & sundown ============================== */
+// Guests dim at the HOST's sunset (carried in the payload), not their own clock's
+// guess — everyone's phone dims with the actual room.
+function duskNow(sunsetAt, now){ // pure: dusk from sunset until ~dawn (12h later)
+  if(typeof sunsetAt !== 'number' || !(sunsetAt > 0)) return false;
+  return now >= sunsetAt && now - sunsetAt < 12*3600*1000;
+}
+function menuSunsetAt(){
+  if(sharedMenu) return (typeof sharedMenu.su === 'number' && sharedMenu.su > 0) ? sharedMenu.su : null;
+  return (_wx.data && _wx.data.sunsetAt) || null;
+}
+function updateDusk(now){
+  if(!document.body.classList.contains('menuMode')) return;
+  if(duskNow(menuSunsetAt(), now == null ? Date.now() : now)) document.body.setAttribute('data-dusk','');
+  else document.body.removeAttribute('data-dusk');
+}
+function applyMenuTheme(){
+  if(!document.body.classList.contains('menuMode')) return;
+  document.body.setAttribute('data-theme', validTheme(sharedMenu ? sharedMenu.th : S.menuTheme));
+  updateDusk();
+}
+let _duskT = null;
+function startDusk(){
+  stopDusk();
+  if(!sharedMenu) fetchWeather().then(() => updateDusk()); // host: today's sunset, geo-gated
+  _duskT = setInterval(() => updateDusk(), 60000);
+  setTimeout(() => document.body.classList.add('m-anim'), 80); // arm the 8s dim AFTER entry paints
+}
+function stopDusk(){
+  if(_duskT){ clearInterval(_duskT); _duskT = null; }
+  document.body.classList.remove('m-anim');
+  document.body.removeAttribute('data-theme');
+  document.body.removeAttribute('data-dusk');
+}
+
 const POUR_CATS = SPIRITS.concat(['amaro']);
 // a drink is 86'd when everything it lacks is a bottle that IS on the shelf but ran dry
 function is86d(r){
@@ -1636,9 +2023,13 @@ function menuPayload(){
   const payload = { t: S.menuTitle, c, s: pours.map(b => ({ n:b.name, c:b.category, t:norm(b.subtype||'') })) };
   if(f) payload.f = f;
   if(S.beerWine.length) payload.b = S.beerWine.slice(0, 50);
+  payload.th = validTheme(S.menuTheme); // guests get the host's theme…
+  const su = _wx.data && _wx.data.sunsetAt;
+  if(typeof su === 'number' && su > 0) payload.su = su; // …and dim at the host's sunset
   return payload;
 }
 function renderMenu(){
+  applyMenuTheme();
   const p = sharedMenu || menuPayload();
   document.getElementById('menu-exit').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-share').classList.toggle('hidden', !!sharedMenu);
@@ -1812,7 +2203,18 @@ function openMenuPicker(){
         '<option value="' + r.id + '"' + (S.featureId === r.id ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('') + '</select>' +
       '<input id="mp-featlbl" value="' + esc(S.featureLabel || 'drink of the night') + '" placeholder="drink of the night" style="margin-top:6px">'
     : '<div class="dim small" style="padding:10px 2px">Feature a drink once something is makeable.</div>';
-  const tabs = ['Cocktails','Pours','Beer &amp; wine','Feature'];
+  const THEME_META = [
+    { key:'golden',     name:'Golden Hour',   tag:'walnut &amp; brass',    bg:'#1a1410', ink:'#f1e6d0', accent:'#c9a15a' },
+    { key:'deco',       name:'Midnight Deco', tag:'black &amp; champagne', bg:'#0b0b0d', ink:'#e8dcc0', accent:'#d4b96a' },
+    { key:'blanc',      name:'Bistro Blanc',  tag:'printed in paris',      bg:'#f4ecdc', ink:'#221d17', accent:'#7a5c2e' },
+    { key:'cassis',     name:'Cassis',        tag:'wine-dark, candlelit',  bg:'#241a2b', ink:'#c9b8d4', accent:'#c2a35c' },
+    { key:'nochebuena', name:'Nochebuena',    tag:'pine &amp; oxblood',    bg:'#12211a', ink:'#f1e6d0', accent:'#cfa54b' },
+  ];
+  const themePane = '<div class="small mut" style="margin-bottom:8px">How the menu dresses for guests — the bar itself stays walnut. Each dims on its own at sundown.</div>' +
+    THEME_META.map(t => '<button class="thsw' + (S.menuTheme === t.key ? ' on' : '') + '" data-th="' + t.key +
+      '" style="background:' + t.bg + ';color:' + t.ink + '"><span class="thname">' + t.name + '</span>' +
+      '<span class="thtag" style="color:' + t.accent + ';border-color:' + t.accent + '">' + t.tag + '</span></button>').join('');
+  const tabs = ['Cocktails','Pours','Beer &amp; wine','Feature','Theme'];
   openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>On tonight&rsquo;s menu</h2>' +
     '<div class="seg" id="mp-tabs" style="margin:10px 0">' + tabs.map((t,i) =>
       '<button data-p="' + i + '"' + (i===0?' class="on"':'') + '>' + t + '</button>').join('') + '</div>' +
@@ -1820,6 +2222,7 @@ function openMenuPicker(){
     '<div class="mp-pane hidden" data-p="1"><div class="small mut" style="margin-bottom:6px">Untick bottles to keep them off the by-the-pour list.</div>' + pRows + '</div>' +
     '<div class="mp-pane hidden" data-p="2">' + bwPane + '</div>' +
     '<div class="mp-pane hidden" data-p="3">' + featPane + '</div>' +
+    '<div class="mp-pane hidden" data-p="4">' + themePane + '</div>' +
     '<div style="display:flex;gap:8px;margin-top:14px"><button class="abtn ghost" id="mp-all">Show everything</button>' +
     '<button class="abtn" id="mp-save" style="flex:1">Save</button></div>');
   document.getElementById('mp-tabs').addEventListener('click', e => {
@@ -1827,6 +2230,12 @@ function openMenuPicker(){
     document.querySelectorAll('#mp-tabs button').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('#modal .mp-pane').forEach(p => p.classList.toggle('hidden', p.dataset.p !== btn.dataset.p));
   });
+  document.querySelectorAll('#modal .thsw').forEach(sw => sw.addEventListener('click', () => {
+    S.menuTheme = validTheme(sw.dataset.th);
+    save();
+    document.querySelectorAll('#modal .thsw').forEach(x => x.classList.toggle('on', x === sw));
+    applyMenuTheme(); // repaints live behind the sheet
+  }));
   const bwListEl = document.getElementById('mp-bwlist');
   const renderBwList = () => {
     bwListEl.innerHTML = bwWork.length ? bwWork.map((n,i) =>
@@ -2103,12 +2512,16 @@ function openRecipeDetail(id){
     const flag = reqGates(ing.req) && !s.ok; // only alcohol bottles get called out
     return '<div class="ing-line' + (flag ? ' miss' : '') + '"><span class="qty">' + esc(scaleQty(ing.qty||'', factor)) + ' ' + esc(ing.unit||'') + '</span>' +
       '<span class="lbl">' + esc(ingLabel(ing)) + (ing.note ? ' <span class="dim small">(' + esc(ing.note) + ')</span>' : '') +
-      (flag ? ' <span class="small" style="color:var(--bad)">missing</span>' : (s.ok && s.low ? ' <span class="lowtag">low</span>' : '')) + '</span></div>';
+      (flag ? ' <span class="small" style="color:var(--bad)">missing</span>' : (s.ok && s.low ? ' <span class="lowtag">low</span>' : '')) +
+      (S.nerdMode && ingVolOz(ing) > 0 ? ' <span class="dim small sgchip">sg ' + sgOf(ing).toFixed(3) + '</span>' : '') + '</span></div>';
   }).join('');
   const li = liData(r);
+  const fv = floatVerdict(r);
   openModal('<button class="mclose" onclick="closeModal()">&times;</button>' +
     '<h2>' + (r.house?'<span class="housestar">★</span> ':'') + esc(r.name) + '</h2>' +
-    '<div class="detmeta">' + esc(r.method) + ' &middot; ' + esc(r.glass||'') + (r.garnish ? ' &middot; ' + esc(r.garnish) : '') + ' &middot; makes ' + makes + '</div>' +
+    '<div class="rowline" style="gap:14px;align-items:center;margin-top:8px">' + drinkSvg(r) +
+      '<div class="grow"><div class="detmeta" style="margin:0">' + esc(r.method) + ' &middot; ' + esc(r.glass||'') + (r.garnish ? ' &middot; ' + esc(r.garnish) : '') + ' &middot; makes ' + makes + '</div>' +
+      (fv ? '<div class="dr-verdict">' + esc(fv.text) + '</div>' : '') + '</div></div>' +
     '<div class="starpick" id="rd-stars">' + [1,2,3,4,5].map(i => '<span data-s="' + i + '" class="' + (i<=(r.rating||0)?'lit':'') + '">★</span>').join('') + '</div>' +
     '<hr class="sep">' +
     '<div class="rowline" style="margin-bottom:8px;gap:8px"><span class="small mut">Scale for</span>' +
@@ -2262,6 +2675,7 @@ function openSettings(){
     '<textarea id="st-staples" rows="3">' + esc(S.staples.join(', ')) + '</textarea>' +
     '<label class="rowline" style="gap:8px;margin-top:14px"><input type="checkbox" id="st-nerd" style="width:auto;transform:scale(1.15)"' + (S.nerdMode ? ' checked' : '') + '>' +
     '<span>Liquid Intelligence in recipe details <span class="dim small">(chilling &amp; dilution physics for stirred and shaken drinks)</span></span></label>' +
+    (S.geo ? '<button class="abtn ghost" id="st-geo-forget" style="width:100%;margin-top:12px">Forget my location</button>' : '') +
     '<hr class="sep"><h3 class="serif" style="color:var(--brass2)">Backup</h3>' +
     (storageFull ? '<div class="small" style="color:var(--bad);margin:6px 0">Storage is full — recent changes may not be saved. Remove wishlist photos or export a backup.</div>' : '') +
     '<div class="small mut" style="margin:4px 0 10px">Your bar lives only in this browser — export a backup now and then.</div>' +
@@ -2285,6 +2699,11 @@ function openSettings(){
   document.getElementById('st-export').onclick = downloadBackup;
   document.getElementById('st-import').onclick = () => document.getElementById('import-file').click();
   document.getElementById('st-nerd').addEventListener('change', e => { S.nerdMode = e.target.checked; save(); });
+  const geoForget = document.getElementById('st-geo-forget');
+  if(geoForget) geoForget.onclick = () => {
+    S.geo = null; S.geoAsked = false; _wx = { at:0, data:null };
+    save(); openSettings(); toast('Location forgotten.');
+  };
   const syncOn = document.getElementById('st-sync-on');
   if(syncOn) syncOn.onclick = () => { enableSync(); openSettings(); toast('Cloud backup is on — copy your code and keep it safe.'); };
   const codeEl = document.getElementById('st-code');

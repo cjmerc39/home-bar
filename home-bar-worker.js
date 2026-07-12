@@ -330,6 +330,17 @@ async function bartender(request, env, cors) {
     ingredients: String(x && x.ingredients || '').slice(0, 200),
   })).filter((x) => x.name);
   if (!drinks.length) return json({ error: 'no makeable drinks provided' }, 400, cors);
+  // optional ambient weather — invalid or absent means the prompt is unchanged
+  const wxIn = body && body.weather;
+  let weather = null;
+  if (wxIn && typeof wxIn === 'object' && typeof wxIn.temp === 'number' && isFinite(wxIn.temp)) {
+    weather = {
+      temp: Math.max(-60, Math.min(130, Math.round(wxIn.temp))),
+      humidity: Math.max(0, Math.min(100, Math.round(Number(wxIn.humidity) || 0))),
+      condition: String(wxIn.condition || '').slice(0, 24),
+      isEvening: !!wxIn.isEvening,
+    };
+  }
 
   const prompt = 'You are the house bartender at a small, warm home bar. From the list of drinks that can be made ' +
     'RIGHT NOW (with base spirit, the owner\'s 0-5 rating, house flag for their own creations, and a low flag meaning ' +
@@ -338,6 +349,10 @@ async function bartender(request, env, cors) {
     'given. A high rating means the owner loves it; a house drink is their pride. If a pick is flagged low, you may ' +
     'note it kindly (last call for that bottle). Each why is ONE warm, specific sentence a good bartender would ' +
     'actually say, under 140 characters — no lists, no hedging.\n\n' +
+    (weather ? 'WEATHER RIGHT NOW: ' + weather.temp + '°F, ' + weather.humidity + '% humidity, ' +
+      (weather.condition || 'mild') + (weather.isEvening ? ', after sundown' : ', daytime') + '. Weigh the weather ' +
+      'naturally but let an explicit mood outrank it: on a hot, humid night lean toward tall, cold, and citrus-bright; ' +
+      'on a rare cold snap let the stirred and brown drinks argue their case.\n\n' : '') +
     'MOOD/OCCASION: ' + (mood || '(none given — use your judgment)') + '\n\nDRINKS:\n' + JSON.stringify(drinks);
 
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -423,8 +438,12 @@ function cleanMenuPayload(p) {
   if (Array.isArray(p.b) && p.b.length) {
     out.b = p.b.slice(0, 50).map((x) => String(x || '').slice(0, 60)).filter(Boolean);
   }
+  // menu theme + the host's sunset epoch, so guests dim with the actual room
+  out.th = MENU_THEMES.includes(p.th) ? p.th : 'golden';
+  if (typeof p.su === 'number' && isFinite(p.su) && p.su > 0) out.su = Math.round(p.su);
   return out;
 }
+const MENU_THEMES = ['golden', 'deco', 'blanc', 'cassis', 'nochebuena'];
 function menuId() {
   const a = crypto.getRandomValues(new Uint8Array(8));
   return [...a].map((b) => (b % 36).toString(36)).join('');

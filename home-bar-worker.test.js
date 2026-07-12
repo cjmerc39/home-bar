@@ -143,5 +143,30 @@ const jbody = (o) => ({ method: 'POST', headers: { 'content-type': 'application/
   j = await r.json();
   assert(r.status === 200 && j.picks.length === 1 && j.picks[0].name === 'Gimlet', 'bartender drops picks that are not on the provided list');
 
+  // --- /bartender optional weather ---
+  const btDrinks = [{ name: 'Gimlet', base: 'gin', rating: 5, house: false, low: false, ingredients: 'gin, lime' }];
+  anthropicCalls = [];
+  r = await call('/bartender', jbody({ mood: '', drinks: btDrinks }));
+  const promptDry = anthropicCalls[0].body.messages[0].content;
+  assert(!/WEATHER/.test(promptDry), 'no weather: the prompt is unchanged');
+  anthropicCalls = [];
+  r = await call('/bartender', jbody({ mood: '', drinks: btDrinks, weather: { temp: 94.6, humidity: 120, condition: 'x'.repeat(50), isEvening: 1 } }));
+  const promptWet = anthropicCalls[0].body.messages[0].content;
+  assert(/WEATHER RIGHT NOW: 95°F, 100% humidity/.test(promptWet), 'weather is clamped and woven into the prompt');
+  assert(/after sundown/.test(promptWet) && !/x{25}/.test(promptWet), 'evening flag lands; condition is truncated');
+  anthropicCalls = [];
+  r = await call('/bartender', jbody({ mood: '', drinks: btDrinks, weather: { temp: 'hot' } }));
+  assert(!/WEATHER/.test(anthropicCalls[0].body.messages[0].content), 'a malformed weather object is treated as absent');
+
+  // --- menu payload carries theme + sunset, whitelisted ---
+  r = await call('/menu', jbody({ t: 'Themed', c: [{ n: 'Negroni', d: 'x', h: false }], s: [], th: 'cassis', su: 1780000000123.7 }));
+  j = await r.json();
+  let stored = JSON.parse(env.__store.get('m:' + j.id));
+  assert(stored.th === 'cassis' && stored.su === 1780000000124, 'menu create round-trips theme + rounded sunset epoch');
+  r = await call('/menu', jbody({ t: 'Bogus', c: [{ n: 'Negroni', d: 'x', h: false }], s: [], th: 'vaporwave', su: 'tonight' }));
+  j = await r.json();
+  stored = JSON.parse(env.__store.get('m:' + j.id));
+  assert(stored.th === 'golden' && stored.su === undefined, 'an unknown theme falls back to golden; a bogus sunset is dropped');
+
   console.log(process.exitCode ? '\nSOME TESTS FAILED' : '\nall green');
 })();
