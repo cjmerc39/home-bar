@@ -1067,6 +1067,11 @@ function renderMenu(){
     html.push('<div class="msec">cocktails</div>');
     for(const r of restItems) html.push(mline(r, ''));
   }
+  const bw = Array.isArray(p.b) ? p.b : [];
+  if(bw.length){
+    html.push('<div class="msec">beer &amp; wine</div>');
+    for(const n of bw) html.push('<div class="mitem bw" data-n="', esc(String(n)), '"><div class="mname">', esc(String(n)), '</div></div>');
+  }
   if(p.s.length){
     html.push('<div class="msec">by the pour</div>');
     const byCat = {};
@@ -1080,11 +1085,6 @@ function renderMenu(){
           '</div>');
       }
     }
-  }
-  const bw = Array.isArray(p.b) ? p.b : [];
-  if(bw.length){
-    html.push('<div class="msec">beer &amp; wine</div>');
-    for(const n of bw) html.push('<div class="mitem bw" data-n="', esc(String(n)), '"><div class="mname">', esc(String(n)), '</div></div>');
   }
   if(sharedMenu && sharedMenuId && (p.c.some(r => !r.x) || bw.length)){
     html.push('<div class="small dim" style="margin-top:34px">tap a drink to send a request to the bar</div>');

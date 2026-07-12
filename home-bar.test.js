@@ -310,6 +310,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('JSON.stringify(S.beerWine)')===JSON.stringify(['Modelo Especial','La Marca Prosecco']), 'beer & wine list saves from the textarea');
   const bwNames = [...d.querySelectorAll('#menu-body .mitem.bw .mname')].map(e=>e.textContent);
   assert(bwNames.length===2 && bwNames[0]==='Modelo Especial', 'beer & wine section renders on the menu');
+  const bwSecs = [...d.querySelectorAll('#menu-body .msec')].map(e=>e.textContent);
+  assert(bwSecs.indexOf('beer & wine') > bwSecs.indexOf('cocktails') && bwSecs.indexOf('beer & wine') < bwSecs.indexOf('by the pour'),
+    'beer & wine sits after cocktails, above by the pour');
   const bwLink = w.eval('buildMenuLink()');
   const bwPayload = JSON.parse(w.eval('JSON.stringify(parseMenuHash('+JSON.stringify('#m=')+' + '+JSON.stringify(bwLink.split('#m=')[1])+'))'));
   assert(Array.isArray(bwPayload.b) && bwPayload.b.length===2, 'share payload carries beer & wine');
