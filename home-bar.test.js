@@ -832,7 +832,33 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(!(negSpot.getAttribute('class')||'').includes('faded') && (martiniSpot.getAttribute('class')||'').includes('faded'), 'a search keeps hits lit and fades the rest — a spotlight, not a filter');
   d.getElementById('spec-search').value='';
   d.getElementById('spec-search').dispatchEvent(new w.Event('input')); await sleep(20);
-  w.eval('S.bottles.find(b=>b.name==="Campari Bitter").level="low"; save();');
+  w.eval('S.bottles.find(b=>b.name==="Campari Bitter").level="low"; save(); renderSpecs();'); await sleep(20);
+  // label declutter: recompute every placed label's box, assert zero overlaps
+  const lblBoxes = [...d.querySelectorAll('#galaxy .star')].map(g => {
+    const lbl = g.querySelector('.slabel');
+    if(!lbl) return null;
+    const t = /translate\(([-\d.]+) ([-\d.]+)\)/.exec(g.getAttribute('transform'));
+    const X = +t[1] + +lbl.getAttribute('x'), Y = +t[2] + +lbl.getAttribute('y');
+    const wl = lbl.textContent.length*5.6 + 6;
+    const anchor = lbl.getAttribute('text-anchor') || 'start';
+    const x0 = anchor==='start' ? X : anchor==='end' ? X-wl : X-wl/2;
+    return { x0, y0: Y-9-3.5, x1: x0+wl, y1: Y-9-3.5+11 };
+  }).filter(Boolean);
+  let lblHits = 0;
+  for(let i=0;i<lblBoxes.length;i++) for(let j=i+1;j<lblBoxes.length;j++){
+    const a=lblBoxes[i], b=lblBoxes[j];
+    if(a.x0<b.x1 && b.x0<a.x1 && a.y0<b.y1 && b.y0<a.y1) lblHits++;
+  }
+  assert(lblBoxes.length>3 && lblHits===0, 'star labels never pile onto each other ('+lblBoxes.length+' placed, 0 overlaps)');
+  const litCenters = [...d.querySelectorAll('#galaxy .star')].filter(g=>/\b(mk|lw|house)\b/.test(g.getAttribute('class')||'')).map(g=>{
+    const t = /translate\(([-\d.]+) ([-\d.]+)\)/.exec(g.getAttribute('transform'));
+    return { x:+t[1], y:+t[2] };
+  });
+  assert(!litCenters.some(cn=>lblBoxes.some(b=>cn.x>b.x0&&cn.x<b.x1&&cn.y>b.y0&&cn.y<b.y1)), 'no lit star sits on top of a label');
+  assert([...d.querySelectorAll('#galaxy .star.house')].every(g=>g.querySelector('.slabel')!==null), 'house drinks always keep their label');
+  const sky1 = d.getElementById('spec-list').innerHTML;
+  w.eval('renderSpecs()'); await sleep(20);
+  assert(d.getElementById('spec-list').innerHTML===sky1, 'the sky renders identically twice — label layout is deterministic');
   w.eval('deleteRecipe('+nova+'.id)'); await sleep(20);
   d.getElementById('btn-specsview').click(); await sleep(20);
   assert(w.eval('S.specsView')==='list' && d.querySelector('#spec-list .rcard')!==null, 'toggling back restores the recipe cards');

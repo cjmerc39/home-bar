@@ -207,7 +207,7 @@ span.scanthumb{display:block;background:var(--bg2)}
 #galaxy .star.lw .core,#galaxy .star.lw .glow,#galaxy .star.lw .core-star{fill:var(--low)}
 #galaxy .star.dim .core{fill:#4d3e2b}
 #galaxy .star.dim .core-star{fill:#5a4933}
-#galaxy .slabel{font-family:var(--serif);font-size:10.5px;fill:var(--mut)}
+#galaxy .slabel{font-family:var(--serif);font-size:10.5px;fill:var(--mut);paint-order:stroke;stroke:#211913;stroke-width:2.6px;stroke-linejoin:round}
 #galaxy .star.lw .slabel{fill:var(--low)}
 #galaxy .star.faded{opacity:.16}
 .gx-axis{font-size:9px;letter-spacing:2.4px;text-transform:uppercase;fill:var(--dim)}
@@ -740,6 +740,44 @@ function starXY(r){ // final field position, in the 400×400 viewBox
   const p = flavorPos(r), j = starJitter(r.id), pad = 26, F = 400;
   return { x: Math.round((pad + p.x*(F-2*pad) + j.dx)*10)/10,
            y: Math.round((pad + (1-p.y)*(F-2*pad) + j.dy)*10)/10 };
+}
+// A crowded sky turns labels into mush, so labels are placed greedily with
+// collision checks: right of the star, else left, below, above — else dropped
+// (the star stays lit and tappable). House drinks always keep their label;
+// higher-rated drinks win contested space. Deterministic, so the sky never
+// reshuffles between renders.
+function starLabel(name){ return name.length > 14 ? name.slice(0, 13) + '…' : name; }
+function starLabelW(name){ return starLabel(name).length * 5.6 + 6; }
+const STAR_LABEL_CAND = [
+  { dx:9,  dy:3.5, anchor:'start'  },
+  { dx:-9, dy:3.5, anchor:'end'    },
+  { dx:0,  dy:16,  anchor:'middle' },
+  { dx:0,  dy:-10, anchor:'middle' },
+];
+function layoutStarLabels(stars){ // stars: [{id,x,y,name,house,rating}] -> {id: candidate|null}
+  const order = stars.slice().sort((a,z) =>
+    (a.house?0:1) - (z.house?0:1) || (z.rating||0) - (a.rating||0) || a.name.localeCompare(z.name) || (a.id < z.id ? -1 : 1));
+  // every lit star is an obstacle too, so a neighbor's dot never lands on a label
+  const placed = stars.map(s => ({ x0: s.x-8, y0: s.y-6, x1: s.x+8, y1: s.y+6 }));
+  const out = {}, H = 11;
+  for(const s of order){
+    const w = starLabelW(s.name);
+    let pick = null;
+    for(const c of STAR_LABEL_CAND){
+      const x0 = c.anchor === 'start' ? s.x + c.dx : c.anchor === 'end' ? s.x + c.dx - w : s.x - w/2;
+      const y0 = s.y + c.dy - 9;
+      const box = { x0, y0, x1: x0 + w, y1: y0 + H };
+      if(box.x0 < 4 || box.x1 > 396 || box.y0 < 20 || box.y1 > 388) continue;
+      if(placed.some(p => box.x0 < p.x1 && p.x0 < box.x1 && box.y0 < p.y1 && p.y0 < box.y1)) continue;
+      pick = c; placed.push(box); break;
+    }
+    if(!pick && s.house){ // a house drink is always labeled, crowd or not
+      pick = STAR_LABEL_CAND[0];
+      placed.push({ x0: s.x + 9, y0: s.y - 5.5, x1: s.x + 9 + w, y1: s.y + 5.5 });
+    }
+    out[s.id] = pick;
+  }
+  return out;
 }
 
 /* ============================== liquid intelligence ============================== */
@@ -1471,7 +1509,7 @@ function renderSpecs(){
    the misses so the hits read as a spotlight. Same taps, same state, new sky. */
 function renderSpecsSky(list){
   const q = norm(specQuery);
-  const dimStars = [], litStars = [];
+  const stars = [];
   for(const r of S.recipes){
     if(specFilter !== 'all' && recipeBase(r) !== specFilter) continue;
     const st = recipeStatus(r);
@@ -1479,18 +1517,22 @@ function renderSpecsSky(list){
     const cls = st.makeable ? (st.low ? 'lw' : 'mk') : 'dim';
     const hit = !q || norm(r.name).includes(q) || r.ingredients.some(ing => norm(ingLabel(ing)).includes(q));
     const p = starXY(r);
-    const parts = ['<g class="star ', cls, r.house ? ' house' : '', hit ? '' : ' faded',
-      '" data-id="', r.id, '" transform="translate(', p.x, ' ', p.y, ')">',
+    stars.push({ id: r.id, name: r.name, x: p.x, y: p.y, cls, house: !!r.house, rating: r.rating||0, hit });
+  }
+  // labels ignore the search so the sky doesn't reshuffle while typing
+  const labels = layoutStarLabels(stars.filter(s => s.house || s.cls !== 'dim'));
+  const dimStars = [], litStars = [];
+  for(const s of stars){
+    const parts = ['<g class="star ', s.cls, s.house ? ' house' : '', s.hit ? '' : ' faded',
+      '" data-id="', s.id, '" transform="translate(', s.x, ' ', s.y, ')">',
       '<circle class="tap" r="24"/>']; // generous invisible tap circle
-    if(r.house) parts.push('<text class="core-star" text-anchor="middle" dy="4.5">★</text>');
-    else if(cls === 'dim') parts.push('<circle class="core" r="2"/>');
+    if(s.house) parts.push('<text class="core-star" text-anchor="middle" dy="4.5">★</text>');
+    else if(s.cls === 'dim') parts.push('<circle class="core" r="2"/>');
     else parts.push('<circle class="glow" r="9"/><circle class="core" r="3.2"/>');
-    if(r.house || cls !== 'dim'){
-      const nm = r.name.length > 16 ? r.name.slice(0, 15) + '…' : r.name;
-      parts.push('<text class="slabel" x="9" y="3.5">', esc(nm), '</text>');
-    }
+    const c = labels[s.id];
+    if(c) parts.push('<text class="slabel" x="', c.dx, '" y="', c.dy, '" text-anchor="', c.anchor, '">', esc(starLabel(s.name)), '</text>');
     parts.push('</g>');
-    (cls === 'dim' && !r.house ? dimStars : litStars).push(parts.join(''));
+    (s.cls === 'dim' && !s.house ? dimStars : litStars).push(parts.join(''));
   }
   list.innerHTML = '<svg id="galaxy" viewBox="0 0 400 400">' +
     '<defs><radialGradient id="gvig" cx="50%" cy="45%" r="72%">' +
