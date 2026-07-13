@@ -2227,7 +2227,16 @@ function renderMenu(){
 /* the whole menu travels inside the link's #hash — nothing is uploaded anywhere */
 function b64uEncode(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
 function b64uDecode(s){ s = s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length % 4) s += '='; return decodeURIComponent(escape(atob(s))); }
-function buildMenuLink(){ return location.origin + location.pathname + '#m=' + b64uEncode(JSON.stringify(menuPayload())); }
+// what actually leaves the phone: a CLOSED bar shares the sign and nothing else —
+// no drink list rides along for someone reading the raw payload
+function sharePayload(){
+  const p = menuPayload();
+  if(!p.cl) return p;
+  const out = { t: p.t, c: [], s: [], th: p.th, cl: true };
+  if(p.su) out.su = p.su;
+  return out;
+}
+function buildMenuLink(){ return location.origin + location.pathname + '#m=' + b64uEncode(JSON.stringify(sharePayload())); }
 function validMenuPayload(p){ return !!(p && typeof p.t === 'string' && Array.isArray(p.c) && Array.isArray(p.s)); }
 function parseMenuHash(hash){
   const m = /^#m=(.+)$/.exec(hash || ''); if(!m) return null;
@@ -2242,7 +2251,7 @@ function enterSharedMenu(p){ sharedMenu = p; setTab('menu'); }
 // Falls back to the long #m= link when the worker is unreachable.
 let _menuPush = { key:null, url:null }; // last successfully pushed payload
 async function ensureMenuLink(){
-  const payload = menuPayload();
+  const payload = sharePayload();
   const key = JSON.stringify(payload);
   if(!CFG.menuUrl) return buildMenuLink();
   if(S.menuId && S.menuOwner){
@@ -2358,6 +2367,7 @@ function openMenuPicker(){
     '<div class="mp-pane hidden" data-p="4">' + themePane + '</div>' +
     '<label class="rowline" style="gap:8px;margin-top:14px"><input type="checkbox" id="mp-closed"' + (S.menuClosed ? ' checked' : '') + ' style="width:auto;transform:scale(1.2)">' +
     '<span>Close the bar <span class="dim small">(guests see a closed sign; flip it back anytime — same link)</span></span></label>' +
+    (S.menuId ? '<button class="abtn danger" id="mp-retire" style="width:100%;margin-top:12px">Retire this link &mdash; next event gets a fresh one</button>' : '') +
     '<div style="display:flex;gap:8px;margin-top:14px"><button class="abtn ghost" id="mp-all">Show everything</button>' +
     '<button class="abtn" id="mp-save" style="flex:1">Save</button></div>');
   document.getElementById('mp-tabs').addEventListener('click', e => {
@@ -2375,6 +2385,11 @@ function openMenuPicker(){
     S.menuClosed = e.target.checked;
     save(); renderMenu(); // repaints live and pushes the closed flag to guests
   });
+  const retire = document.getElementById('mp-retire');
+  if(retire) retire.onclick = () => {
+    if(!confirm('Guests holding the current link will see “menu expired,” for good. Your next share hands out a brand-new link. Retire it?')) return;
+    closeModal(); rotateMenuLink();
+  };
   const bwListEl = document.getElementById('mp-bwlist');
   const renderBwList = () => {
     bwListEl.innerHTML = bwWork.length ? bwWork.map((n,i) =>

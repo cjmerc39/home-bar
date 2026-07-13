@@ -1170,6 +1170,27 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.__pushPosts.length===1 && JSON.parse(w.__pushPosts[0].body).endpoint==='https://push.example/ep1', 'and a fresh subscription takes its place');
   w.eval('S.pushOn = false; save();');
 
+  // ================= retire a menu: a closed bar leaks nothing, a retired link dies =================
+  w.eval('S.menuClosed=true; save();');
+  const sharedBlank = JSON.parse(w.eval('JSON.stringify(sharePayload())'));
+  assert(sharedBlank.cl===true && sharedBlank.c.length===0 && sharedBlank.s.length===0 && !sharedBlank.f && !sharedBlank.b,
+    'a closed bar shares NO menu data — the sign is all anyone can read');
+  const closedLink = w.eval('buildMenuLink()');
+  const closedPayload = JSON.parse(w.eval('JSON.stringify(parseMenuHash('+JSON.stringify('#m=')+' + '+JSON.stringify(closedLink.split('#m=')[1])+'))'));
+  assert(closedPayload.cl===true && closedPayload.c.length===0, 'the long link is equally blank while closed');
+  w.eval('setTab("menu")'); await sleep(30);
+  assert(d.getElementById('menu-closedband')!==null && d.querySelectorAll('#menu-body .mitem').length>0,
+    'the HOST still sees the full menu while closed');
+  w.eval('S.menuClosed=false; save();');
+  w.eval('openMenuPicker()'); await sleep(20);
+  assert(d.getElementById('mp-retire')!==null, 'the curate sheet offers Retire this link');
+  const oldMenuId = w.eval('S.menuId');
+  w.__menuDeleted = ''; w.__menuPosts = 0;
+  d.getElementById('mp-retire').click(); await sleep(150);
+  assert(String(w.__menuDeleted).includes('/menu/'+oldMenuId), 'retiring revokes the old link at the worker — expired for old guests, for good');
+  assert(w.eval('S.menuId')==='abc123' && w.__menuPosts===1, 'and a brand-new link is minted for the next event');
+  w.eval('setTab("shelf")'); await sleep(10);
+
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
 
