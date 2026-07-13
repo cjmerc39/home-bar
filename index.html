@@ -118,7 +118,9 @@ body.menuMode #tabbar,body.menuMode #topbar{display:none}
 #menu-exit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;color:var(--m-dim,var(--dim));font-size:20px;z-index:7;padding:8px}
 #menu-share{position:fixed;top:calc(12px + env(safe-area-inset-top));left:12px;color:var(--m-dim,var(--dim));font-size:16px;z-index:7;padding:8px}
 #menu-curate{position:fixed;top:calc(12px + env(safe-area-inset-top));left:52px;color:var(--m-dim,var(--dim));font-size:16px;z-index:7;padding:8px}
-#menu-reqs{position:fixed;top:calc(12px + env(safe-area-inset-top));left:92px;color:var(--m-dim,var(--dim));font-size:14px;z-index:7;padding:8px;white-space:nowrap}
+#menu-tender{position:fixed;top:calc(12px + env(safe-area-inset-top));left:92px;color:var(--m-dim,var(--dim));font-size:15px;z-index:7;padding:8px}
+#menu-tender.on{color:var(--m-accent,var(--brass2))}
+#menu-reqs{position:fixed;top:calc(12px + env(safe-area-inset-top));left:132px;color:var(--m-dim,var(--dim));font-size:14px;z-index:7;padding:8px;white-space:nowrap}
 .wthumb{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--line);flex:none}
 .wthumb.big{width:110px;height:110px}
 .wph{width:54px;height:54px;border-radius:8px;border:1px dashed var(--brassdim);display:flex;align-items:center;justify-content:center;color:var(--brassdim);flex:none;font-size:20px}
@@ -377,6 +379,7 @@ body.menuMode #modal .cc-card{border-color:var(--m-rule)}
     <button id="menu-exit" title="Back to the bar">&times;</button>
     <button id="menu-share" title="Share the menu">&#10548;</button>
     <button id="menu-curate" title="Choose cocktails">&#9998;</button>
+    <button id="menu-tender" title="Bartender mode — tap a drink for its spec">&#127864;</button>
     <button id="menu-reqs" class="hidden" title="Drink requests">&#128276;</button>
     <div id="menu-body"></div>
   </section>
@@ -2202,6 +2205,7 @@ function renderWishlist(){
   wishEl.querySelectorAll('.wish').forEach(el => el.addEventListener('click', () => openWishForm(el.dataset.id)));
 }
 let sharedMenu = null; // payload from a shared link (read-only guest view)
+let bartenderMode = false; // host-only, per session: tap a menu drink to open its spec
 
 /* ============================== menu themes & sundown ============================== */
 // Guests dim at the HOST's sunset (carried in the payload), not their own clock's
@@ -2289,6 +2293,8 @@ function renderMenu(){
   document.getElementById('menu-exit').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-share').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-curate').classList.toggle('hidden', !!sharedMenu);
+  document.getElementById('menu-tender').classList.toggle('hidden', !!sharedMenu);
+  document.getElementById('menu-tender').classList.toggle('on', bartenderMode && !sharedMenu);
   if(sharedMenu && sharedMenu.expired){ // a retired link dead-ends HERE, never in the admin app
     document.getElementById('menu-body').innerHTML =
       '<div class="menu-sign" id="menu-expired"><div class="cbig">Expired</div>' +
@@ -2356,6 +2362,15 @@ function renderMenu(){
   if(sharedMenu && sharedMenuId){
     document.querySelectorAll('#menu-body .mitem[data-n]').forEach(el =>
       el.addEventListener('click', () => openRequestSheet(el.dataset.n)));
+  }
+  if(!sharedMenu && bartenderMode){ // bartender mode: a tap on the menu opens the spec
+    document.querySelectorAll('#menu-body .mitem[data-n]').forEach(el => {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => {
+        const r = S.recipes.find(x => norm(x.name) === norm(el.dataset.n));
+        if(r) openRecipeDetail(r.id);
+      });
+    });
   }
   const reqBtn = document.getElementById('menu-reqs');
   reqBtn.classList.add('hidden');
@@ -3089,6 +3104,11 @@ document.getElementById('recipe-file').addEventListener('change', e => {
 });
 document.getElementById('menu-share').addEventListener('click', shareMenu);
 document.getElementById('menu-curate').addEventListener('click', openMenuPicker);
+document.getElementById('menu-tender').addEventListener('click', () => {
+  bartenderMode = !bartenderMode;
+  renderMenu();
+  toast(bartenderMode ? 'Bartender mode — tap any drink for its spec.' : 'Bartender mode off.');
+});
 document.getElementById('menu-reqs').addEventListener('click', openRequestInbox);
 document.getElementById('bt-ask').addEventListener('click', askBartender);
 document.getElementById('btn-addwish').addEventListener('click', () => openWishForm(null));

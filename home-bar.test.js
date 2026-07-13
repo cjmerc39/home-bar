@@ -446,7 +446,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('S.bottles.find(b=>b.name==="Sipsmith").level="full"; renderMenu();'); await sleep(20);
   assert(d.querySelectorAll('#menu-body .mname.dead').length===0, 'restocking clears the 86 marks');
 
-  assert(d.querySelectorAll('#view-menu button').length===4, 'admin menu chrome is just curate + share + requests + exit');
+  assert(d.querySelectorAll('#view-menu button').length===5, 'admin menu chrome: curate + share + bartender + requests + exit');
   d.getElementById('menu-exit').click(); await sleep(20);
   assert(!d.body.classList.contains('menuMode'), 'menu exit returns to admin');
 
@@ -1260,6 +1260,29 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   [...d.querySelectorAll('#spec-filters .chip')].find(c=>c.dataset.f==='__house').click(); await sleep(20);
   assert(d.querySelectorAll('#spec-list .rcard').length>expectedHouse.length, 'toggling off restores the full spec book');
   w.eval('setTab("shelf")'); await sleep(10);
+
+  // ================= bartender mode: tap the menu, get the spec =================
+  w.eval('setTab("menu")'); await sleep(30);
+  assert(!d.getElementById('menu-tender').classList.contains('hidden'), 'the host sees the bartender toggle');
+  let firstItem = d.querySelector('#menu-body .mitem[data-n]');
+  firstItem.click(); await sleep(20);
+  assert(!d.getElementById('modalwrap').classList.contains('on'), 'off by default: menu taps do nothing (safe to hand over)');
+  d.getElementById('menu-tender').click(); await sleep(30);
+  assert(d.getElementById('menu-tender').classList.contains('on'), 'the shaker lights up when bartender mode is on');
+  firstItem = d.querySelector('#menu-body .mitem[data-n]');
+  const tapName = firstItem.dataset.n;
+  firstItem.click(); await sleep(30);
+  assert(d.getElementById('modalwrap').classList.contains('on') && d.getElementById('rd-scale')!==null
+    && d.querySelector('#modal h2').textContent.includes(tapName), 'tapping a drink opens its full spec');
+  w.eval('closeModal()'); await sleep(10);
+  d.getElementById('menu-tender').click(); await sleep(30);
+  firstItem = d.querySelector('#menu-body .mitem[data-n]');
+  firstItem.click(); await sleep(20);
+  assert(!d.getElementById('modalwrap').classList.contains('on'), 'toggling off makes the menu inert again');
+  // guests never see the toggle
+  w.eval('enterSharedMenu({ t:"X", c:[{n:"Negroni",d:"x",h:false}], s:[], th:"golden" })'); await sleep(20);
+  assert(d.getElementById('menu-tender').classList.contains('hidden'), 'guests never see bartender mode');
+  w.eval('sharedMenu=null; setTab("shelf");'); await sleep(10);
 
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
