@@ -296,6 +296,15 @@ body.menuMode #toast .tact{color:var(--m-accent)}
 .menu-sign .csub{font-size:11px;letter-spacing:3.5px;text-transform:uppercase;color:var(--m-dim,var(--dim));margin-top:12px}
 .menu-sign .cnote{font-family:var(--serif);font-style:italic;color:var(--m-mut,var(--mut));margin-top:26px;font-size:15.5px;line-height:1.5}
 body.menuMode[data-theme="deco"] .menu-sign{border:3px double var(--m-rule)}
+/* the concierge chat */
+#cc-log{max-height:44vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0}
+.cc-msg{max-width:88%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.45}
+.cc-msg.u{align-self:flex-end;background:var(--brassdim);color:#1c140b}
+.cc-msg.a{align-self:flex-start;background:var(--bg3);border:1px solid var(--line);font-family:var(--serif)}
+.cc-card{align-self:stretch;border:1px solid var(--brassdim);border-radius:12px;padding:10px 12px;margin:2px 0 4px}
+body.menuMode #modal .cc-msg.u{background:var(--m-accent);color:var(--m-panel)}
+body.menuMode #modal .cc-msg.a{background:rgba(0,0,0,.10);border-color:var(--m-rule)}
+body.menuMode #modal .cc-card{border-color:var(--m-rule)}
 /* theme swatches in the curate sheet */
 .thsw{display:block;width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;text-align:left}
 .thsw.on{outline:2px solid var(--brass)}
@@ -396,8 +405,9 @@ const MENU_URL = 'https://home-bar.cj13mercado.workers.dev/menu';
 const MENU_PAGE = 'https://home-bar.cj13mercado.workers.dev/m/';
 const SYNC_URL = 'https://home-bar.cj13mercado.workers.dev/sync';
 const BARTENDER_URL = 'https://home-bar.cj13mercado.workers.dev/bartender';
+const CONCIERGE_URL = 'https://home-bar.cj13mercado.workers.dev/concierge';
 const KEY = 'bar-v1';
-const CFG = { scanUrl: SCAN_URL, recipeUrl: RECIPE_URL, menuUrl: MENU_URL, menuPage: MENU_PAGE, syncUrl: SYNC_URL, bartenderUrl: BARTENDER_URL };   // mutable indirection so tests can disable pieces
+const CFG = { scanUrl: SCAN_URL, recipeUrl: RECIPE_URL, menuUrl: MENU_URL, menuPage: MENU_PAGE, syncUrl: SYNC_URL, bartenderUrl: BARTENDER_URL, conciergeUrl: CONCIERGE_URL };   // mutable indirection so tests can disable pieces
 
 const CATEGORIES = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy','amaro','liqueur','vermouth','bitters','wine','mixer','spice','milk','other'];
 const SPIRITS = ['tequila','mezcal','whiskey','rum','gin','vodka','brandy'];
@@ -1648,11 +1658,14 @@ function openGeoAsk(){ // once, on first bartender use — never on boot, never 
 }
 
 /* ============================== AI bartender ============================== */
-async function requestBartender(mood){
-  const drinks = S.recipes.filter(r => recipeStatus(r).makeable).map(r => ({
+function makeableDrinkList(){ // what the shelf can pour RIGHT NOW — all any AI ever sees
+  return S.recipes.filter(r => recipeStatus(r).makeable).map(r => ({
     name: r.name, base: recipeBase(r), rating: r.rating||0, house: !!r.house,
     low: recipeStatus(r).low, ingredients: autoDesc(r),
   }));
+}
+async function requestBartender(mood){
+  const drinks = makeableDrinkList();
   const body = { mood: mood||'', drinks }; // without weather this is byte-identical to before
   const wx = await fetchWeather();
   if(wx) body.weather = { temp: Math.round(wx.temp), humidity: wx.humidity == null ? 0 : Math.round(wx.humidity),
@@ -1682,6 +1695,92 @@ async function askBartender(){
   }catch(e){
     closeModal(); toast('The bartender stepped out — try again in a moment.');
   }
+}
+
+/* ============================== the menu concierge ============================== */
+// A conversation that ends in a menu: describe the event, react to proposals,
+// and one tap writes the result into the menu's own settings. It only ever
+// sees makeable drinks, and the apply step re-verifies every pick against the
+// shelf — a drink you can't make cannot reach the menu from either side.
+let _ccHistory = [], _ccBusy = false;
+function openConcierge(){
+  _ccHistory = []; _ccBusy = false;
+  if(S.geo) fetchWeather(); // warm the cache so later turns can mention the night
+  openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>The concierge</h2>' +
+    '<div class="small mut" style="margin:4px 0 10px">Tell me about tonight &mdash; the occasion, the crowd, the vibe &mdash; and I&rsquo;ll draft a menu from what your shelf can actually make. Push back until it&rsquo;s right, then set it with one tap.</div>' +
+    '<div id="cc-log"></div>' +
+    '<div style="display:flex;gap:8px;margin-top:10px"><input id="cc-input" placeholder="e.g. six friends, taco night, casual&hellip;">' +
+    '<button class="abtn" id="cc-send">Send</button></div>');
+  document.getElementById('cc-send').onclick = ccSend;
+  document.getElementById('cc-input').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); ccSend(); } });
+  document.getElementById('cc-input').focus();
+}
+function ccRender(){
+  const log = document.getElementById('cc-log'); if(!log) return;
+  log.innerHTML = _ccHistory.map((m, i) => {
+    if(m.role === 'user') return '<div class="cc-msg u">' + esc(m.text) + '</div>';
+    return '<div class="cc-msg a">' + esc(m.text) + '</div>' + (m.menu ? ccCard(m.menu, i) : '');
+  }).join('') + (_ccBusy ? '<div class="cc-msg a dim">composing&hellip;</div>' : '');
+  log.querySelectorAll('.cc-apply').forEach(b => b.onclick = () => applyConciergeMenu((_ccHistory[+b.dataset.i] || {}).menu));
+  log.scrollTop = log.scrollHeight;
+}
+function ccCard(menu, i){
+  return '<div class="cc-card">' +
+    (menu.feature ? '<div class="serif" style="margin-bottom:4px"><span class="housestar">★</span> ' + esc(menu.feature) +
+      ' <span class="dim small">' + esc(menu.featureLabel || 'drink of the night') + '</span></div>' : '') +
+    '<div class="small">' + menu.picks.map(esc).join(' &middot; ') + '</div>' +
+    (menu.theme && THEME_KEYS.includes(menu.theme) ? '<div class="small dim" style="margin-top:3px">theme: ' + esc(menu.theme) + '</div>' : '') +
+    '<button class="abtn cc-apply" data-i="' + i + '" style="width:100%;margin-top:9px">Set tonight&rsquo;s menu</button></div>';
+}
+async function ccSend(){
+  const inp = document.getElementById('cc-input');
+  if(!inp || _ccBusy) return;
+  const text = (inp.value || '').trim();
+  if(!text) return;
+  inp.value = '';
+  _ccHistory.push({ role:'user', text });
+  _ccBusy = true; ccRender();
+  try{
+    const res = await requestConcierge();
+    _ccHistory.push({ role:'ai', text: res.reply, menu: res.menu || null });
+  }catch(e){
+    _ccHistory.push({ role:'ai', text: 'I stepped away from the stand for a moment — say that again?' });
+  }
+  _ccBusy = false; ccRender();
+  const again = document.getElementById('cc-input');
+  if(again) again.focus();
+}
+async function requestConcierge(){
+  const body = {
+    history: _ccHistory.slice(-12).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', text: String(m.text).slice(0, 600) })),
+    drinks: makeableDrinkList(),
+    beerWine: S.beerWine.slice(0, 20),
+    context: {
+      time: new Date().toLocaleString([], { weekday:'long', hour:'numeric', minute:'2-digit' }),
+      weather: _wx.data ? wxLineText(_wx.data) : ''
+    }
+  };
+  const r = await fetch(CFG.conciergeUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const j = await r.json().catch(()=>null);
+  if(!r.ok || !j || j.error || typeof j.reply !== 'string') throw new Error((j && j.error) || 'concierge failed');
+  return j;
+}
+function applyConciergeMenu(menu){
+  if(!menu || !Array.isArray(menu.picks)) return;
+  const makeable = S.recipes.filter(r => recipeStatus(r).makeable);
+  const byName = {};
+  makeable.forEach(r => { byName[norm(r.name)] = r; });
+  const ids = [], seen = {};
+  for(const n of menu.picks){ const r = byName[norm(n)]; if(r && !seen[r.id]){ seen[r.id] = 1; ids.push(r.id); } }
+  const feat = menu.feature ? byName[norm(menu.feature)] : null;
+  if(feat && !seen[feat.id]){ seen[feat.id] = 1; ids.push(feat.id); } // the feature must be ON the menu to be featured
+  if(!ids.length){ toast('None of those are makeable right now — ask it to try again.'); return; }
+  S.menuSelection = ids.length === makeable.length ? null : ids;
+  S.featureId = feat ? feat.id : null;
+  if(feat) S.featureLabel = String(menu.featureLabel || '').trim().slice(0, 60) || 'drink of the night';
+  if(menu.theme && THEME_KEYS.includes(menu.theme)) S.menuTheme = menu.theme;
+  save(); closeModal(); renderMenu();
+  toast('Tonight’s menu is set — ' + ids.length + ' drink' + (ids.length === 1 ? '' : 's') + (feat ? ', ★ ' + feat.name : '') + '.');
 }
 
 /* ============================== drink-request push alerts ============================== */
@@ -2401,6 +2500,7 @@ function openMenuPicker(){
       '<span class="thtag" style="color:' + t.accent + ';border-color:' + t.accent + '">' + t.tag + '</span></button>').join('');
   const tabs = ['Cocktails','Pours','Beer &amp; wine','Feature','Theme'];
   openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>On tonight&rsquo;s menu</h2>' +
+    (CFG.conciergeUrl ? '<button class="abtn ghost" id="mp-ai" style="width:100%;margin:8px 0 2px">&#10024; Let the concierge plan tonight</button>' : '') +
     '<div class="seg" id="mp-tabs" style="margin:10px 0">' + tabs.map((t,i) =>
       '<button data-p="' + i + '"' + (i===0?' class="on"':'') + '>' + t + '</button>').join('') + '</div>' +
     '<div class="mp-pane" data-p="0"><div class="small mut" style="margin-bottom:6px">Untick anything you&rsquo;d rather not offer; all ticked = automatic.</div>' + cRows + '</div>' +
@@ -2408,6 +2508,7 @@ function openMenuPicker(){
     '<div class="mp-pane hidden" data-p="2">' + bwPane + '</div>' +
     '<div class="mp-pane hidden" data-p="3">' + featPane + '</div>' +
     '<div class="mp-pane hidden" data-p="4">' + themePane + '</div>' +
+    '<hr class="sep">' +
     '<label class="rowline" style="gap:8px;margin-top:14px"><input type="checkbox" id="mp-closed"' + (S.menuClosed ? ' checked' : '') + ' style="width:auto;transform:scale(1.2)">' +
     '<span>Close the bar <span class="dim small">(guests see a closed sign; flip it back anytime — same link)</span></span></label>' +
     (S.menuId ? '<button class="abtn danger" id="mp-retire" style="width:100%;margin-top:12px">Retire this link &mdash; next event gets a fresh one</button>' : '') +
@@ -2428,6 +2529,8 @@ function openMenuPicker(){
     S.menuClosed = e.target.checked;
     save(); renderMenu(); // repaints live and pushes the closed flag to guests
   });
+  const mpAi = document.getElementById('mp-ai');
+  if(mpAi) mpAi.onclick = openConcierge;
   const retire = document.getElementById('mp-retire');
   if(retire) retire.onclick = () => {
     if(!confirm('Guests holding the current link will see “menu expired,” for good. Your next share hands out a brand-new link. Retire it?')) return;

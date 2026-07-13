@@ -120,6 +120,7 @@ export default {
     if (path === '/recipe' && request.method === 'POST') return recipe(request, env, cors);
     if (path === '/sync') return sync(request, env, cors);
     if (path === '/bartender' && request.method === 'POST') return bartender(request, env, cors);
+    if (path === '/concierge' && request.method === 'POST') return concierge(request, env, cors);
     if (path === '/push/vapid' && request.method === 'GET') return pushVapid(env, cors);
     const mPush = /^\/menu\/([A-Za-z0-9]{4,32})\/push$/.exec(path);
     if (mPush && request.method === 'POST') return pushSub(mPush[1], request, env, cors);
@@ -383,6 +384,112 @@ async function bartender(request, env, cors) {
   const picks = (Array.isArray(parsed && parsed.picks) ? parsed.picks : [])
     .filter((p) => p && names.has(String(p.name || '').toLowerCase())).slice(0, 3);
   return json({ picks }, 200, cors);
+}
+
+/* ---- /concierge : compose tonight's menu in conversation with the host ----
+   The client sends ONLY the currently-makeable drinks; the prompt hard-rules the
+   model to that list and the response picks are filtered against it again, so a
+   drink the shelf can't make can never reach the menu. */
+const CONCIERGE_SCHEMA = {
+  type: 'object',
+  properties: {
+    reply: { type: 'string' },
+    menu: {
+      type: 'object',
+      properties: {
+        picks: { type: 'array', items: { type: 'string' } },
+        feature: { type: 'string' },
+        featureLabel: { type: 'string' },
+        theme: { type: 'string' },
+      },
+      required: ['picks'],
+      additionalProperties: false,
+    },
+  },
+  required: ['reply'],
+  additionalProperties: false,
+};
+
+async function concierge(request, env, cors) {
+  if (!env.ANTHROPIC_API_KEY) return json({ error: 'ANTHROPIC_API_KEY secret not set on the worker' }, 500, cors);
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: 'bad request body' }, 400, cors); }
+  const drinks = (Array.isArray(body && body.drinks) ? body.drinks : []).slice(0, 80).map((x) => ({
+    name: String(x && x.name || '').slice(0, 80),
+    base: String(x && x.base || '').slice(0, 20),
+    rating: Math.max(0, Math.min(5, parseInt(x && x.rating, 10) || 0)),
+    house: !!(x && x.house),
+    low: !!(x && x.low),
+    ingredients: String(x && x.ingredients || '').slice(0, 200),
+  })).filter((x) => x.name);
+  if (!drinks.length) return json({ error: 'no makeable drinks provided' }, 400, cors);
+  const history = (Array.isArray(body && body.history) ? body.history : []).slice(-12)
+    .map((m) => ({ role: m && m.role === 'assistant' ? 'assistant' : 'user', content: String(m && m.text || '').slice(0, 600) }))
+    .filter((m) => m.content);
+  if (!history.length || history[history.length - 1].role !== 'user') return json({ error: 'no message' }, 400, cors);
+  const beerWine = (Array.isArray(body && body.beerWine) ? body.beerWine : []).slice(0, 20).map((x) => String(x).slice(0, 60));
+  const ctx = (body && body.context) || {};
+  const time = String(ctx.time || '').slice(0, 60);
+  const weather = String(ctx.weather || '').slice(0, 60);
+
+  const brief = 'You are the concierge of a small, warm home bar, composing tonight\'s guest menu WITH the host. ' +
+    'HARD RULE: only drinks from the DRINKS list below may appear in menu.picks or menu.feature — each name copied EXACTLY; ' +
+    'never invent a drink. The list already contains only what the shelf can make right now. ' +
+    'Fit the menu to the occasion, crowd, and hour: tight and confident (usually 5-9 cocktails), varied across base spirits, ' +
+    'high-rated and house (their own creations) drinks favored. Pick a feature drink with a short label like "drink of the night" ' +
+    'when the occasion invites one. You may suggest a visual theme by key: golden (walnut & brass, the default), ' +
+    'deco (black & champagne, art deco), blanc (light printed-paper menu), cassis (wine-dark purple, candlelit), ' +
+    'nochebuena (holiday pine & oxblood), lagoon (teal & coral, tiki). ' +
+    'reply = 1-3 warm sentences as a colleague: the shape of your proposal, or ONE pointed question if you truly need it. ' +
+    'Include the menu object whenever you propose or revise a concrete lineup; refine it as the host reacts.' +
+    '\n\nTONIGHT: ' + (time || 'unknown hour') + (weather ? ' · ' + weather : '') +
+    (beerWine.length ? '\nBEER & WINE ALSO ON OFFER: ' + beerWine.join(', ') : '') +
+    '\n\nDRINKS (the complete makeable list):\n' + JSON.stringify(drinks);
+  const messages = [
+    { role: 'user', content: brief },
+    { role: 'assistant', content: 'Understood — tell me about tonight.' },
+  ].concat(history);
+
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-8',
+      max_tokens: 1200,
+      messages,
+      output_config: { format: { type: 'json_schema', schema: CONCIERGE_SCHEMA } },
+    }),
+  });
+  const resp = await r.json().catch(() => null);
+  if (!r.ok) return json({ error: (resp && resp.error && resp.error.message) || 'api error' }, 502, cors);
+  if (resp && resp.stop_reason === 'refusal') return json({ error: 'the model declined this request' }, 502, cors);
+  const out = ((resp && resp.content) || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  let parsed;
+  try { parsed = JSON.parse(out); } catch (e) { return json({ error: 'could not parse model output' }, 502, cors); }
+  if (!parsed || typeof parsed.reply !== 'string') return json({ error: 'no reply in model output' }, 502, cors);
+  let menu = null;
+  if (parsed.menu && Array.isArray(parsed.menu.picks)) {
+    const names = new Map(drinks.map((d) => [d.name.toLowerCase(), d.name]));
+    const picks = [];
+    for (const p of parsed.menu.picks.slice(0, 20)) {
+      const real = names.get(String(p || '').toLowerCase());
+      if (real && !picks.includes(real)) picks.push(real);
+    }
+    if (picks.length) {
+      menu = { picks };
+      const feat = names.get(String(parsed.menu.feature || '').toLowerCase());
+      if (feat) {
+        menu.feature = feat;
+        menu.featureLabel = String(parsed.menu.featureLabel || 'drink of the night').slice(0, 60);
+      }
+      if (/^[a-z]{3,16}$/.test(String(parsed.menu.theme || ''))) menu.theme = parsed.menu.theme;
+    }
+  }
+  return json({ reply: parsed.reply.slice(0, 600), menu }, 200, cors);
 }
 
 /* ---- /menu/:id/req : guest drink requests ---- */

@@ -166,6 +166,24 @@ const jbody = (o) => ({ method: 'POST', headers: { 'content-type': 'application/
   r = await call('/bartender', jbody({ mood: '', drinks: btDrinks, weather: { temp: 'hot' } }));
   assert(!/WEATHER/.test(anthropicCalls[0].body.messages[0].content), 'a malformed weather object is treated as absent');
 
+  // --- /concierge: shelf-bound menu composition ---
+  r = await call('/concierge', jbody({ history: [{ role: 'user', text: 'party' }], drinks: [] }));
+  assert(r.status === 400, 'concierge requires a makeable list');
+  anthropicCalls = [];
+  anthropicReply = textReply({ reply: 'Here is a lineup.', menu: { picks: ['Gimlet', 'Imaginary Fizz', 'gimlet'], feature: 'GIMLET', featureLabel: 'the pour', theme: 'lagoon' } });
+  r = await call('/concierge', jbody({ history: [{ role: 'user', text: 'taco night for six' }], drinks: btDrinks, beerWine: ['Modelo'], context: { time: 'Saturday 7:12 PM', weather: '94° and humid' } }));
+  j = await r.json();
+  assert(r.status === 200 && j.reply === 'Here is a lineup.', 'concierge answers');
+  assert(JSON.stringify(j.menu.picks) === JSON.stringify(['Gimlet']) && j.menu.feature === 'Gimlet', 'picks are filtered to the provided list, deduped, case-healed');
+  assert(j.menu.theme === 'lagoon' && j.menu.featureLabel === 'the pour', 'theme and feature label ride through');
+  const ccMsgs = anthropicCalls[0].body.messages;
+  assert(/HARD RULE/.test(ccMsgs[0].content) && /94° and humid/.test(ccMsgs[0].content) && /Modelo/.test(ccMsgs[0].content), 'the brief carries the rule, the night, and the beer list');
+  assert(ccMsgs[ccMsgs.length - 1].content === 'taco night for six', 'the host message closes the conversation');
+  anthropicReply = textReply({ reply: 'Hmm.', menu: { picks: ['Nothing Real'] } });
+  r = await call('/concierge', jbody({ history: [{ role: 'user', text: 'x' }], drinks: btDrinks }));
+  j = await r.json();
+  assert(j.menu === null, 'a proposal with zero real picks is withheld');
+
   // --- menu payload carries theme + sunset, whitelisted ---
   r = await call('/menu', jbody({ t: 'Themed', c: [{ n: 'Negroni', d: 'x', h: false }], s: [], th: 'cassis', su: 1780000000123.7 }));
   j = await r.json();

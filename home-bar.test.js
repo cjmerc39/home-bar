@@ -26,6 +26,11 @@ const dom = new JSDOM(html, {
         if(w.__wxFail) return { ok:false, status:500, json: async () => ({}) };
         return { ok:true, status:200, json: async () => (w.__wxResult || {}) };
       }
+      if(u.includes('/concierge')){
+        w.__ccBodies = w.__ccBodies || [];
+        w.__ccBodies.push(String(opts && opts.body || ''));
+        return { ok:true, status:200, json: async () => (w.__ccResult || { reply:'…' }) };
+      }
       if(u.includes('/bartender')){
         w.__bartenderBodies = w.__bartenderBodies || [];
         w.__bartenderBodies.push(String(opts && opts.body || ''));
@@ -1201,6 +1206,44 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(d.body.getAttribute('data-theme')==='golden', 'the sign wears the default theme');
   w.__menuGetGone = false;
   w.eval('sharedMenu=null; sharedMenuId=null; setTab("shelf");'); await sleep(10);
+
+  // ================= the menu concierge =================
+  w.eval('setTab("menu")'); await sleep(20);
+  w.eval('openMenuPicker()'); await sleep(20);
+  const closeLbl = d.getElementById('mp-closed').closest('label');
+  assert(closeLbl.previousElementSibling && closeLbl.previousElementSibling.tagName==='HR', 'a rule now separates Close the bar — easier to find');
+  assert(d.getElementById('mp-ai')!==null, 'the curate sheet offers the concierge');
+  d.getElementById('mp-ai').click(); await sleep(20);
+  assert(d.getElementById('cc-input')!==null && d.getElementById('cc-send')!==null, 'the concierge opens as a chat');
+  w.__ccBodies = [];
+  w.__ccResult = { reply:'A bright, easy spread for taco night — Gimlet up front.',
+    menu:{ picks:['Gimlet','Margarita','Imaginary Fizz'], feature:'Gimlet', featureLabel:'taco night pour', theme:'lagoon' } };
+  d.getElementById('cc-input').value = 'six friends, taco night';
+  d.getElementById('cc-send').click(); await sleep(80);
+  const ccReq = JSON.parse(w.__ccBodies[0]);
+  const mkNames = JSON.parse(w.eval('JSON.stringify(makeableDrinkList().map(x=>x.name))'));
+  assert(ccReq.drinks.length===mkNames.length && ccReq.drinks.every(x=>mkNames.includes(x.name)), 'the concierge only ever sees makeable drinks');
+  assert(ccReq.history.length===1 && ccReq.history[0].role==='user' && /taco night/.test(ccReq.history[0].text), 'the event brief rides the history');
+  assert(typeof ccReq.context.time==='string' && ccReq.context.time.length>0, 'the hour rides along');
+  assert(/bright, easy spread/.test(d.getElementById('cc-log').textContent), 'the reply lands in the chat');
+  assert(d.querySelector('#cc-log .cc-card')!==null && d.querySelector('#cc-log .cc-apply')!==null, 'a concrete proposal renders with a Set button');
+  w.__ccResult = { reply:'Swapped for something lighter.', menu:{ picks:['Gimlet'], theme:'lagoon' } };
+  d.getElementById('cc-input').value = 'less booze-forward please';
+  d.getElementById('cc-send').click(); await sleep(80);
+  assert(JSON.parse(w.__ccBodies[1]).history.length===3, 'feedback carries the whole conversation (user, assistant, user)');
+  const applyBtns = [...d.querySelectorAll('#cc-log .cc-apply')];
+  applyBtns[0].click(); await sleep(30); // apply the FIRST proposal — the one with unmakeable + imaginary picks
+  const gimletId = w.eval('S.recipes.find(r=>r.name==="Gimlet").id');
+  assert(w.eval('JSON.stringify(S.menuSelection)')===JSON.stringify([gimletId]), 'apply keeps only what the shelf can make — Margarita and the fake are dropped');
+  assert(w.eval('S.featureId')===gimletId && w.eval('S.featureLabel')==='taco night pour', 'the feature and its label are written to the menu settings');
+  assert(w.eval('S.menuTheme')==='lagoon' && d.body.getAttribute('data-theme')==='lagoon', 'the suggested theme applies live');
+  assert(!d.getElementById('modalwrap').classList.contains('on'), 'the sheet closes — the menu behind it IS the result');
+  const ccShown = [...d.querySelectorAll('#menu-body .mitem .mname')].map(e=>e.textContent);
+  assert(ccShown.length===1 && ccShown[0].includes('Gimlet'), 'the live menu shows exactly the applied selection');
+  w.eval('S.menuSelection=null; S.featureId=null; S.featureLabel="drink of the night"; S.menuTheme="golden"; save(); setTab("shelf");'); await sleep(10);
+  w.eval('CFG.conciergeUrl=""; setTab("menu"); openMenuPicker();'); await sleep(20);
+  assert(d.getElementById('mp-ai')===null, 'no relay configured: the concierge button vanishes');
+  w.eval('closeModal(); CFG.conciergeUrl=CONCIERGE_URL; setTab("shelf");'); await sleep(10);
 
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
