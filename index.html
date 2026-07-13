@@ -266,6 +266,36 @@ body.menuMode[data-theme="cassis"][data-dusk]{--m-bg:#1b1322;--m-ink:#b3a3c0;--m
 /* nochebuena: pine, gold, oxblood rules — one drink, one season */
 body.menuMode[data-theme="nochebuena"]{--m-bg:#12211a;--m-ink:#f1e6d0;--m-mut:#c3b49a;--m-dim:#7f8b7a;--m-accent:#cfa54b;--m-rule:#7e2f33;--m-vig:.7}
 body.menuMode[data-theme="nochebuena"][data-dusk]{--m-bg:#0c1812;--m-accent:#c1963f}
+/* lagoon: tiki hour — deep teal, coral, sand. Deliberately NOT walnut-and-gold. */
+body.menuMode[data-theme="lagoon"]{--m-bg:#0e2a28;--m-ink:#f2ead8;--m-mut:#cfc3a6;--m-dim:#7fa096;--m-accent:#ef8a6d;--m-rule:#3f6b64;--m-vig:.55}
+body.menuMode[data-theme="lagoon"][data-dusk]{--m-bg:#091e1d;--m-accent:#d97a5f}
+/* pop-ups over a themed menu (guest request sheet, curate sheet, toasts) wear the theme */
+body.menuMode{--m-panel:var(--bg2)}
+body.menuMode[data-theme="deco"]{--m-panel:#101014}
+body.menuMode[data-theme="blanc"]{--m-panel:#fbf5ea}
+body.menuMode[data-theme="cassis"]{--m-panel:#2c2135}
+body.menuMode[data-theme="nochebuena"]{--m-panel:#17281f}
+body.menuMode[data-theme="lagoon"]{--m-panel:#123430}
+body.menuMode #modal{background:var(--m-panel);border-color:var(--m-rule);color:var(--m-ink)}
+body.menuMode #modal h2,body.menuMode #modal h3{color:var(--m-accent)}
+body.menuMode #modal .mut,body.menuMode #modal .fieldlbl{color:var(--m-mut)}
+body.menuMode #modal .dim,body.menuMode #modal .mclose{color:var(--m-dim)}
+body.menuMode #modal input,body.menuMode #modal textarea,body.menuMode #modal select{background:rgba(0,0,0,.10);color:var(--m-ink);border-color:var(--m-rule)}
+body.menuMode #modal ::placeholder{color:var(--m-dim)}
+body.menuMode #modal .abtn{background:var(--m-accent);color:var(--m-panel)}
+body.menuMode #modal .abtn.ghost{background:transparent;color:var(--m-accent);border-color:var(--m-rule)}
+body.menuMode #modal .abtn.danger{background:transparent;color:var(--bad);border-color:var(--bad)}
+body.menuMode #modal .seg{border-color:var(--m-rule)}
+body.menuMode #modal .seg button{background:rgba(0,0,0,.10);color:var(--m-mut)}
+body.menuMode #modal .seg button.on{background:var(--m-accent);color:var(--m-panel)}
+body.menuMode #toast{background:var(--m-panel);border-color:var(--m-rule);color:var(--m-ink)}
+body.menuMode #toast .tact{color:var(--m-accent)}
+/* the closed / expired signs — a real sign on the door, not a shrug */
+.menu-sign{margin:9vh auto 0;max-width:340px;border:1px solid var(--m-rule,var(--brassdim));border-radius:16px;padding:36px 24px 30px}
+.menu-sign .cbig{font-family:var(--serif);font-size:42px;letter-spacing:8px;text-indent:8px;color:var(--m-accent,var(--brass2));text-transform:uppercase}
+.menu-sign .csub{font-size:11px;letter-spacing:3.5px;text-transform:uppercase;color:var(--m-dim,var(--dim));margin-top:12px}
+.menu-sign .cnote{font-family:var(--serif);font-style:italic;color:var(--m-mut,var(--mut));margin-top:26px;font-size:15.5px;line-height:1.5}
+body.menuMode[data-theme="deco"] .menu-sign{border:3px double var(--m-rule)}
 /* theme swatches in the curate sheet */
 .thsw{display:block;width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;text-align:left}
 .thsw.on{outline:2px solid var(--brass)}
@@ -536,7 +566,7 @@ function seedRecipes(){
 /* ============================== state ============================== */
 let S = null;
 function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[], menuId:null, menuOwner:null, savedAt:0, shelfView:'list', specsView:'list', nerdMode:false, menuTheme:'golden', geo:null, geoAsked:false, menuClosed:false, pushOn:false }; }
-const THEME_KEYS = ['golden','deco','blanc','cassis','nochebuena'];
+const THEME_KEYS = ['golden','deco','blanc','cassis','nochebuena','lagoon'];
 function validTheme(t){ return THEME_KEYS.includes(t) ? t : 'golden'; }
 // geo is rounded to 2 decimals (~1km) before it ever lands in state — the weather
 // doesn't need more and a backup file shouldn't carry a precise home address
@@ -2154,11 +2184,20 @@ function renderMenu(){
   document.getElementById('menu-exit').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-share').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-curate').classList.toggle('hidden', !!sharedMenu);
-  if(sharedMenu && p.cl){ // the host closed the bar: a closed sign, not a menu
+  if(sharedMenu && sharedMenu.expired){ // a retired link dead-ends HERE, never in the admin app
     document.getElementById('menu-body').innerHTML =
-      '<div class="menu-head">' + esc(p.t) + '</div>' +
-      '<hr class="menu-rule"><div class="menu-sub">until next time</div>' +
-      '<div id="menu-closed" class="serif" style="font-style:italic;font-size:19px;color:var(--m-mut);margin-top:70px">The bar is closed tonight.<br>Thanks for coming.</div>';
+      '<div class="menu-sign" id="menu-expired"><div class="cbig">Expired</div>' +
+      '<div class="csub">this menu link has been retired</div>' +
+      '<div class="cnote">Ask your host for a fresh invitation.</div></div>';
+    document.getElementById('menu-reqs').classList.add('hidden');
+    return;
+  }
+  if(sharedMenu && p.cl){ // the host closed the bar: a proper sign on the door
+    document.getElementById('menu-body').innerHTML =
+      '<div class="menu-head">' + esc(p.t) + '</div><hr class="menu-rule">' +
+      '<div class="menu-sign" id="menu-closed"><div class="cbig">Closed</div>' +
+      '<div class="csub">until next time</div>' +
+      '<div class="cnote">The bar is resting tonight. Thanks for coming &mdash; this link wakes up with it.</div></div>';
     document.getElementById('menu-reqs').classList.add('hidden');
     return; // the guest poll keeps watching — reopening brings the menu back live
   }
@@ -2318,7 +2357,10 @@ async function loadSharedMenu(id){
       return;
     }
   }catch(e){}
-  toast('That menu link has expired.');
+  // retired or dead link: park the guest at an Expired sign — never the admin app
+  sharedMenuId = null;
+  sharedMenu = { t:'', c:[], s:[], expired:true };
+  setTab('menu');
 }
 function openMenuPicker(){
   const makeable = S.recipes.filter(r => recipeStatus(r).makeable).sort((a,z)=>a.name.localeCompare(z.name));
@@ -2351,6 +2393,7 @@ function openMenuPicker(){
     { key:'blanc',      name:'Bistro Blanc',  tag:'printed in paris',      bg:'#f4ecdc', ink:'#221d17', accent:'#7a5c2e' },
     { key:'cassis',     name:'Cassis',        tag:'wine-dark, candlelit',  bg:'#241a2b', ink:'#c9b8d4', accent:'#c2a35c' },
     { key:'nochebuena', name:'Nochebuena',    tag:'pine &amp; oxblood',    bg:'#12211a', ink:'#f1e6d0', accent:'#cfa54b' },
+    { key:'lagoon',     name:'Lagoon',        tag:'teal &amp; coral, tiki hour', bg:'#0e2a28', ink:'#f2ead8', accent:'#ef8a6d' },
   ];
   const themePane = '<div class="small mut" style="margin-bottom:8px">How the menu dresses for guests — the bar itself stays walnut. Each dims on its own at sundown.</div>' +
     THEME_META.map(t => '<button class="thsw' + (S.menuTheme === t.key ? ' on' : '') + '" data-th="' + t.key +

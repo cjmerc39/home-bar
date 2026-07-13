@@ -174,7 +174,13 @@ const jbody = (o) => ({ method: 'POST', headers: { 'content-type': 'application/
   r = await call('/menu', jbody({ t: 'Bogus', c: [{ n: 'Negroni', d: 'x', h: false }], s: [], th: 'vaporwave', su: 'tonight' }));
   j = await r.json();
   stored = JSON.parse(env.__store.get('m:' + j.id));
-  assert(stored.th === 'golden' && stored.su === undefined, 'an unknown theme falls back to golden; a bogus sunset is dropped');
+  assert(stored.th === 'vaporwave' && stored.su === undefined, 'slug-shaped theme keys pass through (the client validates); a bogus sunset is dropped');
+  r = await call('/menu', jbody({ t: 'Junk', c: [], s: [], th: 'NOT A SLUG!!' }));
+  j = await r.json();
+  assert(JSON.parse(env.__store.get('m:' + j.id)).th === 'golden', 'non-slug junk still falls back to golden');
+  r = await call('/menu', jbody({ t: 'Tiki', c: [], s: [], th: 'lagoon' }));
+  j = await r.json();
+  assert(JSON.parse(env.__store.get('m:' + j.id)).th === 'lagoon', 'the new Lagoon theme rides through without a worker change ever again');
 
   // --- the closed flag rides the payload, literal true only ---
   r = await call('/menu', jbody({ t: 'Closed Bar', c: [], s: [], cl: true }));

@@ -1026,7 +1026,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('openMenuPicker()'); await sleep(20);
   const themeTab = [...d.querySelectorAll('#mp-tabs button')].find(b=>b.textContent==='Theme');
   themeTab.click(); await sleep(20);
-  assert(d.querySelectorAll('#modal .thsw').length===5, 'the theme pane offers five swatches');
+  assert(d.querySelectorAll('#modal .thsw').length===6, 'the theme pane offers six swatches');
+  assert(d.querySelector('#modal .thsw[data-th="lagoon"]')!==null && w.eval('validTheme("lagoon")')==='lagoon', 'Lagoon is a first-class theme');
   d.querySelector('#modal .thsw[data-th="cassis"]').click(); await sleep(20);
   assert(w.eval('S.menuTheme')==='cassis' && d.body.getAttribute('data-theme')==='cassis', 'picking a swatch persists and repaints live');
   assert(d.querySelector('#modal .thsw[data-th="cassis"]').classList.contains('on'), 'the picked swatch is marked');
@@ -1130,7 +1131,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(d.getElementById('menu-closedband')!==null, 'the host sees a quiet closed band, menu still editable');
   w.eval('setTab("shelf")'); await sleep(10);
   w.eval('enterSharedMenu({ t:"CJ Bar", c:[{n:"Negroni",d:"x",h:false}], s:[], th:"golden", cl:true })'); await sleep(30);
-  assert(d.getElementById('menu-closed')!==null && /closed tonight/.test(d.getElementById('menu-body').textContent), 'guests get a closed sign, not the menu');
+  assert(d.getElementById('menu-closed')!==null && d.querySelector('#menu-closed .cbig').textContent==='Closed' && /resting tonight/.test(d.getElementById('menu-body').textContent), 'guests get a real CLOSED sign, not the menu');
   assert(d.querySelectorAll('#menu-body .mitem').length===0, 'no drinks and no request taps while closed');
   w.eval('delete sharedMenu.cl; renderMenu();'); await sleep(20);
   assert(d.querySelectorAll('#menu-body .mitem').length===1, 'reopening brings the SAME link back to life');
@@ -1190,6 +1191,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(String(w.__menuDeleted).includes('/menu/'+oldMenuId), 'retiring revokes the old link at the worker — expired for old guests, for good');
   assert(w.eval('S.menuId')==='abc123' && w.__menuPosts===1, 'and a brand-new link is minted for the next event');
   w.eval('setTab("shelf")'); await sleep(10);
+  // a guest refreshing a retired link dead-ends at an Expired sign, never the admin app
+  w.__menuGetGone = true;
+  await w.loadSharedMenu('deadbeef'); await sleep(30);
+  assert(d.body.classList.contains('menuMode') && d.getElementById('menu-expired')!==null
+    && d.querySelector('#menu-expired .cbig').textContent==='Expired', 'a retired link parks the guest at an Expired sign');
+  assert(d.getElementById('menu-exit').classList.contains('hidden') && d.getElementById('menu-share').classList.contains('hidden')
+    && d.getElementById('menu-curate').classList.contains('hidden'), 'the Expired sign carries zero admin chrome — no way into the app');
+  assert(d.body.getAttribute('data-theme')==='golden', 'the sign wears the default theme');
+  w.__menuGetGone = false;
+  w.eval('sharedMenu=null; sharedMenuId=null; setTab("shelf");'); await sleep(10);
 
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');

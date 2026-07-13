@@ -589,13 +589,15 @@ function cleanMenuPayload(p) {
   if (Array.isArray(p.b) && p.b.length) {
     out.b = p.b.slice(0, 50).map((x) => String(x || '').slice(0, 60)).filter(Boolean);
   }
-  // menu theme + the host's sunset epoch, so guests dim with the actual room
-  out.th = MENU_THEMES.includes(p.th) ? p.th : 'golden';
+  // menu theme + the host's sunset epoch, so guests dim with the actual room.
+  // Any slug-shaped key passes through — the CLIENT validates against its own
+  // theme list (unknowns render golden), so new themes never need a worker paste.
+  out.th = /^[a-z]{3,16}$/.test(String(p.th || '')) ? String(p.th) : 'golden';
   if (typeof p.su === 'number' && isFinite(p.su) && p.su > 0) out.su = Math.round(p.su);
   if (p.cl === true) out.cl = true; // the bar is closed: guests see a closed sign, the link stays alive
   return out;
 }
-const MENU_THEMES = ['golden', 'deco', 'blanc', 'cassis', 'nochebuena'];
+const MENU_THEMES = ['golden', 'deco', 'blanc', 'cassis', 'nochebuena', 'lagoon']; // informational — validation is slug-shaped
 function menuId() {
   const a = crypto.getRandomValues(new Uint8Array(8));
   return [...a].map((b) => (b % 36).toString(36)).join('');
