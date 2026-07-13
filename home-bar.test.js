@@ -1245,6 +1245,22 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(d.getElementById('mp-ai')===null, 'no relay configured: the concierge button vanishes');
   w.eval('closeModal(); CFG.conciergeUrl=CONCIERGE_URL; setTab("shelf");'); await sleep(10);
 
+  // ================= specs: house-favorites filter =================
+  w.eval('setTab("specs")'); await sleep(20);
+  const houseChip = [...d.querySelectorAll('#spec-filters .chip')].find(c=>c.dataset.f==='__house');
+  assert(!!houseChip && /House/.test(houseChip.textContent), 'the specs filters offer ★ House');
+  houseChip.click(); await sleep(20);
+  const houseNames = [...d.querySelectorAll('#spec-list .rname')].map(e=>e.textContent);
+  const expectedHouse = JSON.parse(w.eval('JSON.stringify(S.recipes.filter(r=>r.house).map(r=>r.name))'));
+  assert(houseNames.length===expectedHouse.length && expectedHouse.every(n=>houseNames.some(h=>h.includes(n))), 'the list shows exactly the house drinks');
+  // it applies in the galaxy too
+  d.getElementById('btn-specsview').click(); await sleep(30);
+  assert(d.querySelectorAll('#galaxy .star').length===expectedHouse.length, 'the galaxy hides everything but the house stars');
+  d.getElementById('btn-specsview').click(); await sleep(20);
+  [...d.querySelectorAll('#spec-filters .chip')].find(c=>c.dataset.f==='__house').click(); await sleep(20);
+  assert(d.querySelectorAll('#spec-list .rcard').length>expectedHouse.length, 'toggling off restores the full spec book');
+  w.eval('setTab("shelf")'); await sleep(10);
+
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
 
