@@ -1284,6 +1284,27 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(d.getElementById('menu-tender').classList.contains('hidden'), 'guests never see bartender mode');
   w.eval('sharedMenu=null; setTab("shelf");'); await sleep(10);
 
+  // ================= the build: derived step-by-step =================
+  assert(w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r15")))')===w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r15")))'), 'steps are deterministic');
+  const dqSteps = JSON.parse(w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r15")))')); // Daiquiri
+  assert(dqSteps[0]==='Chill the coupe.' && dqSteps.some(s=>/Shake hard.*15 seconds/.test(s)) && dqSteps.some(s=>/Double-strain/.test(s)), 'Daiquiri: chill, shake ~15s (the physics), double-strain up');
+  const negSteps = JSON.parse(w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r23")))')); // Negroni
+  assert(negSteps.some(s=>/Stir about 95 seconds/.test(s)) && negSteps.some(s=>/big cube/.test(s)), 'Negroni: stir ~95s, over the big cube');
+  const sazSteps = JSON.parse(w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r08")))')); // Sazerac
+  assert(sazSteps.some(s=>/Rinse the glass with the absinthe/.test(s)) && sazSteps.some(s=>/rinsed glass, no ice/.test(s)), 'Sazerac: the rinse pattern, served without ice');
+  const wsSteps = JSON.parse(w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r03")))')); // Whiskey Sour
+  assert(wsSteps.some(s=>/Dry-shake/.test(s)), 'egg white earns the dry-shake');
+  const mojSteps = JSON.parse(w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r16")))')); // Mojito
+  assert(mojSteps[0].includes('mint') && mojSteps.some(s=>/Top with the soda water/.test(s)), 'Mojito: mint first, bubbles last');
+  const coSteps = JSON.parse(w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r22")))')); // Corn 'n Oil
+  assert(coSteps.some(s=>/Float the aged rum.*it holds/.test(s)), "Corn 'n Oil: the float step knows it holds");
+  const f75Steps = JSON.parse(w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r28")))')); // French 75
+  const f75Shake = f75Steps.findIndex(s=>/Shake hard/.test(s)), f75Top = f75Steps.findIndex(s=>/Top with the sparkling wine/.test(s));
+  assert(f75Shake>=0 && f75Top>f75Shake && !f75Steps.some(s=>/Combine.*sparkling/.test(s)), 'French 75: bubbles stay OUT of the shaker, topped after the strain');
+  w.eval('openRecipeDetail("r15")'); await sleep(20);
+  assert(d.getElementById('rd-steps')!==null && d.querySelectorAll('#rd-steps .step').length===dqSteps.length, 'the detail sheet walks the build step by step');
+  w.eval('closeModal()'); await sleep(10);
+
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
 

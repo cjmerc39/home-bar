@@ -114,7 +114,10 @@ body.menuMode #tabbar,body.menuMode #topbar{display:none}
 .unlock .buy{color:var(--brass2);font-weight:600}
 .shopline{display:flex;gap:8px;align-items:baseline}
 /* menu */
-#view-menu{padding:34px 8px calc(60px + env(safe-area-inset-bottom));text-align:center}
+/* topbar is hidden in menu mode, so the menu itself must clear the status bar
+   AND the floating chrome row (share/curate/shaker/bell/exit) — the title sits
+   below the symbols, never under them */
+#view-menu{padding:calc(62px + env(safe-area-inset-top)) 8px calc(60px + env(safe-area-inset-bottom));text-align:center}
 #menu-exit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;color:var(--m-dim,var(--dim));font-size:20px;z-index:7;padding:8px}
 #menu-share{position:fixed;top:calc(12px + env(safe-area-inset-top));left:12px;color:var(--m-dim,var(--dim));font-size:16px;z-index:7;padding:8px}
 #menu-curate{position:fixed;top:calc(12px + env(safe-area-inset-top));left:52px;color:var(--m-dim,var(--dim));font-size:16px;z-index:7;padding:8px}
@@ -238,6 +241,9 @@ span.scanthumb{display:block;background:var(--bg2)}
 .dr-foam{fill:rgba(246,243,236,.75)}
 .dr-ice{fill:rgba(255,255,255,.10);stroke:rgba(255,255,255,.38);stroke-width:.9}
 .dr-verdict{font-family:var(--serif);color:var(--brass2);font-size:14px;margin-top:5px}
+#rd-steps{margin-top:2px}
+.step{display:flex;gap:9px;padding:3px 0;font-size:14px;line-height:1.45}
+.stepn{color:var(--brassdim);font-family:var(--serif);min-width:16px;text-align:right;flex:none}
 /* weather ambient line */
 #wx-line{letter-spacing:.4px;margin:6px 2px 8px}
 /* menu themes: the admin app stays walnut forever; Menu Mode consumes --m-* vars
@@ -1210,6 +1216,64 @@ function drinkSvg(r){
   h.push(garnishGlyphs(r, g));
   h.push('</svg>');
   return h.join('');
+}
+/* ============================== the build, step by step ==============================
+   Derived, never typed: method, glass, garnish, rinses, floats, egg whites, and
+   the density + chilling models already imply the procedure, so the steps write
+   themselves — and stay true when the recipe changes. */
+function serve5(method){ return Math.max(5, Math.round(liServe(method)/5)*5); }
+function stepsFor(r){
+  const steps = [];
+  const g = glassFor(r.glass);
+  const glassName = String(r.glass||'').trim() || 'glass';
+  const up = ['coupe','martini','flute','wine'].includes(g.key);
+  const fizzy = ing => {
+    const t = (ing.req||{}).tag || {};
+    const sub = norm(t.subtype||'');
+    return (norm(t.category) === 'mixer' && SODA_SUBTYPES.includes(sub)) || (norm(t.category) === 'wine' && sub === 'sparkling');
+  };
+  const rinse = r.ingredients.find(i => i.unit === 'rinse');
+  const floatI = r.ingredients.find(isFloatCand);
+  const eggy = r.ingredients.some(i => i.req && i.req.staple && /egg/.test(norm(i.req.staple)));
+  const minty = r.ingredients.some(i => i.unit === 'leaf');
+  const topLate = (r.method === 'shake' || r.method === 'stir') ? r.ingredients.filter(i => fizzy(i) && i !== floatI) : [];
+  const core = r.ingredients.filter(i => i !== rinse && i !== floatI && !topLate.includes(i) && ingVolOz(i) > 0);
+  const names = arr => arr.map(ingLabel).join(', ');
+  if(up) steps.push('Chill the ' + glassName + '.');
+  if(/salt/.test(norm(r.garnish||''))) steps.push('Run a lime wedge around the rim and roll it in salt.');
+  if(rinse) steps.push('Rinse the glass with the ' + ingLabel(rinse) + '; dump the excess.');
+  if(r.method === 'shake'){
+    steps.push('Combine ' + (names(core) || 'everything') + ' in a shaker.');
+    if(eggy) steps.push('Dry-shake first — no ice, ten hard seconds — to build the foam.');
+    steps.push('Shake hard with ice, about ' + serve5('shake') + ' seconds — until the tin frosts over.');
+    steps.push(up ? 'Double-strain into the chilled ' + glassName + '.' : 'Strain over fresh ice.');
+  } else if(r.method === 'stir'){
+    steps.push('Add ' + (names(core) || 'everything') + ' to a mixing glass with plenty of ice.');
+    steps.push('Stir about ' + serve5('stir') + ' seconds — cold, silky, properly diluted.');
+    steps.push(rinse ? 'Strain into the rinsed glass, no ice.' : up ? 'Strain into the chilled ' + glassName + '.' : 'Strain over a big cube.');
+  } else if(r.method === 'blend'){
+    steps.push('Blend ' + (names(core) || 'everything') + ' with about a cup of ice until smooth.');
+    steps.push('Pour into the ' + glassName + '.');
+  } else { // build
+    const pour = core.filter(i => !fizzy(i)).sort((a,z) => sgOf(z) - sgOf(a));
+    const bubbles = core.filter(fizzy);
+    if(minty){
+      steps.push('Slap the mint awake and drop it in.');
+      if(pour.length) steps.push('Pour in ' + names(pour) + '.');
+      steps.push('Fill the ' + glassName + ' with ice.');
+    } else {
+      steps.push('Fill the ' + glassName + ' with ice.');
+      if(pour.length) steps.push('Pour in ' + names(pour) + (pour.length > 1 ? ' — heaviest first, they layer' : '') + '.');
+    }
+    if(bubbles.length){ steps.push('Top with the ' + names(bubbles) + '.'); steps.push('One gentle stir.'); }
+  }
+  if(topLate.length) steps.push('Top with the ' + names(topLate) + '.');
+  if(floatI){
+    const fv = floatVerdict(r);
+    steps.push('Float the ' + ingLabel(floatI) + (fv && fv.holds ? ' over the back of a bar spoon — it holds.' : ' — it will marble in, and that’s fine.'));
+  }
+  if((r.garnish||'').trim()) steps.push('Garnish: ' + r.garnish.trim() + '.');
+  return steps;
 }
 
 /* ============================== wishlist ============================== */
@@ -2855,6 +2919,9 @@ function openRecipeDetail(id){
     '<div class="rowline" style="margin-bottom:8px;gap:8px"><span class="small mut">Scale for</span>' +
     '<input id="rd-scale" type="number" min="1" value="' + makes + '" style="max-width:80px"><span class="small mut">drink' + (makes===1?'':'s') + '</span></div>' +
     '<div id="rd-ings">' + ingLines(1) + '</div>' +
+    '<label class="fieldlbl">The build</label>' +
+    '<div id="rd-steps">' + stepsFor(r).map((s, i) =>
+      '<div class="step"><span class="stepn">' + (i+1) + '</span><span>' + esc(s) + '</span></div>').join('') + '</div>' +
     (li ? '<hr class="sep"><div id="li-sec"><button id="li-toggle"><span class="t">Liquid Intelligence</span><span id="li-chev" class="dim">&#9656;</span></button>' +
       '<div id="li-body" class="hidden">' + liBodyHtml(li) + '</div></div>' : '') +
     '<label class="fieldlbl">Notes</label><textarea id="rd-notes" rows="2">' + esc(r.notes||'') + '</textarea>' +
