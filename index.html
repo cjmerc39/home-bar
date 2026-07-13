@@ -535,7 +535,7 @@ function seedRecipes(){
 
 /* ============================== state ============================== */
 let S = null;
-function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[], menuId:null, menuOwner:null, savedAt:0, shelfView:'list', specsView:'list', nerdMode:false, menuTheme:'golden', geo:null, geoAsked:false }; }
+function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[], menuId:null, menuOwner:null, savedAt:0, shelfView:'list', specsView:'list', nerdMode:false, menuTheme:'golden', geo:null, geoAsked:false, menuClosed:false, pushOn:false }; }
 const THEME_KEYS = ['golden','deco','blanc','cassis','nochebuena'];
 function validTheme(t){ return THEME_KEYS.includes(t) ? t : 'golden'; }
 // geo is rounded to 2 decimals (~1km) before it ever lands in state — the weather
@@ -577,6 +577,8 @@ function load(){
   d.menuTheme = validTheme(d.menuTheme);
   d.geo = cleanGeo(d.geo);
   d.geoAsked = d.geoAsked === true;
+  d.menuClosed = d.menuClosed === true;
+  d.pushOn = d.pushOn === true;
   return d;
 }
 let _saveT = null, storageFull = false;
@@ -1245,6 +1247,8 @@ function importJSON(text){
   d.menuTheme = validTheme(d.menuTheme);
   d.geo = cleanGeo(d.geo);
   d.geoAsked = d.geoAsked === true;
+  d.menuClosed = d.menuClosed === true;
+  d.pushOn = d.pushOn === true;
   S = d; save(); renderAll(); return null;
 }
 function downloadBackup(){
@@ -1648,6 +1652,82 @@ async function askBartender(){
   }catch(e){
     closeModal(); toast('The bartender stepped out — try again in a moment.');
   }
+}
+
+/* ============================== drink-request push alerts ============================== */
+// Real push notifications for the host: iOS supports Web Push for INSTALLED
+// (home-screen) apps. The worker mints its own VAPID keys — nothing to configure.
+// sw.js handles push only (no fetch handler), so it can never serve a stale app.
+const PUSH_VAPID_URL = 'https://home-bar.cj13mercado.workers.dev/push/vapid';
+function pushSupported(){
+  return !!(typeof navigator !== 'undefined' && navigator.serviceWorker &&
+    typeof window !== 'undefined' && window.PushManager && window.Notification);
+}
+function pushPermission(){ return (typeof Notification !== 'undefined' && Notification.permission) || 'default'; }
+function b64uToBytes(s){
+  s = String(s||'').replace(/-/g,'+').replace(/_/g,'/');
+  while(s.length % 4) s += '=';
+  const bin = atob(s), u = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+function sameBytes(a, b){
+  if(!a || !b || a.length !== b.length) return false;
+  for(let i=0;i<a.length;i++) if(a[i] !== b[i]) return false;
+  return true;
+}
+async function ensurePushSub(){ // idempotent: (re)binds this device's subscription to the current menu id
+  if(!S.pushOn || !pushSupported() || !CFG.menuUrl || pushPermission() !== 'granted') return false;
+  try{
+    const reg = await navigator.serviceWorker.register('sw.js');
+    const r = await fetch(PUSH_VAPID_URL);
+    const j = await r.json().catch(()=>null);
+    if(!r.ok || !j || !j.key) return false;
+    const want = b64uToBytes(j.key);
+    let sub = await reg.pushManager.getSubscription();
+    // the push service pins the worker's key at subscribe time — if the worker's
+    // identity ever changed (KV wipe, re-paste), a stale sub would fail forever
+    // with 403s that never prune. Drop it and re-mint so alerts self-heal.
+    const have = sub && sub.options && sub.options.applicationServerKey;
+    if(sub && have && !sameBytes(new Uint8Array(have), want)){
+      try{ await sub.unsubscribe(); }catch(e){}
+      sub = null;
+    }
+    if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: want });
+    await ensureMenuLink(); // mints the menu id + owner if this bar never shared before
+    if(!S.menuId || !S.menuOwner) return false;
+    const r2 = await fetch(CFG.menuUrl + '/' + S.menuId + '/push', { method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + S.menuOwner },
+      body: JSON.stringify(sub) });
+    return r2.ok;
+  }catch(e){ return false; }
+}
+async function enablePush(){ // must run from a tap — Apple requires a user gesture for the prompt
+  if(!pushSupported()){ toast('Add the app to your Home Screen first — alerts need the installed app.'); return; }
+  let perm = 'denied';
+  try{ perm = await Notification.requestPermission(); }catch(e){}
+  if(perm !== 'granted'){ toast('Notifications are blocked — allow them in Settings for this app.'); openSettings(); return; }
+  S.pushOn = true; save();
+  const ok = await ensurePushSub();
+  if(!ok){ S.pushOn = false; save(); }
+  openSettings();
+  toast(ok ? 'You’ll get a ping when a guest requests a drink.' : 'Couldn’t reach the notification service — try again in a moment.');
+}
+async function disablePush(){
+  S.pushOn = false; save();
+  try{
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if(sub){
+      if(S.menuId && S.menuOwner && CFG.menuUrl){
+        try{ await fetch(CFG.menuUrl + '/' + S.menuId + '/push', { method:'DELETE',
+          headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + S.menuOwner },
+          body: JSON.stringify({ endpoint: sub.endpoint }) }); }catch(e){}
+      }
+      await sub.unsubscribe();
+    }
+  }catch(e){}
+  openSettings(); toast('Alerts off.');
 }
 
 /* ============================== guest drink requests ============================== */
@@ -2065,6 +2145,7 @@ function menuPayload(){
   payload.th = validTheme(S.menuTheme); // guests get the host's theme…
   const su = _wx.data && _wx.data.sunsetAt;
   if(typeof su === 'number' && su > 0) payload.su = su; // …and dim at the host's sunset
+  if(S.menuClosed) payload.cl = true; // closed: guests see a closed sign, the link stays alive
   return payload;
 }
 function renderMenu(){
@@ -2073,9 +2154,20 @@ function renderMenu(){
   document.getElementById('menu-exit').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-share').classList.toggle('hidden', !!sharedMenu);
   document.getElementById('menu-curate').classList.toggle('hidden', !!sharedMenu);
+  if(sharedMenu && p.cl){ // the host closed the bar: a closed sign, not a menu
+    document.getElementById('menu-body').innerHTML =
+      '<div class="menu-head">' + esc(p.t) + '</div>' +
+      '<hr class="menu-rule"><div class="menu-sub">until next time</div>' +
+      '<div id="menu-closed" class="serif" style="font-style:italic;font-size:19px;color:var(--m-mut);margin-top:70px">The bar is closed tonight.<br>Thanks for coming.</div>';
+    document.getElementById('menu-reqs').classList.add('hidden');
+    return; // the guest poll keeps watching — reopening brings the menu back live
+  }
   // (short link pre-warms below, together with the request-inbox bell)
-  const html = ['<div class="menu-head">', esc(p.t), '</div>',
-    '<hr class="menu-rule"><div class="menu-sub">this evening’s pours</div>'];
+  const html = [];
+  if(!sharedMenu && S.menuClosed)
+    html.push('<div id="menu-closedband" class="small" style="letter-spacing:1.5px;text-transform:uppercase;color:var(--m-accent,var(--brass2));border:1px solid var(--m-rule,var(--brassdim));border-radius:99px;display:inline-block;padding:6px 14px;margin-bottom:10px">Closed &mdash; guests see a closed sign</div>');
+  html.push('<div class="menu-head">', esc(p.t), '</div>',
+    '<hr class="menu-rule"><div class="menu-sub">this evening’s pours</div>');
   if(!p.c.length && !p.s.length && !p.f) html.push('<div id="menu-empty">The bar is resting tonight.</div>');
   const mline = (r, extraCls) =>
     '<div class="mitem' + (extraCls||'') + '"' + (r.x ? '' : ' data-n="' + esc(r.n) + '"') + '><div class="mname' + (r.x ? ' dead' : '') + '">' +
@@ -2185,6 +2277,7 @@ async function rotateMenuLink(){ // revoke last month's link, mint a fresh one
   }
   S.menuId = null; S.menuOwner = null; _menuPush = { key:null, url:null }; save();
   const url = await ensureMenuLink();
+  if(S.pushOn) ensurePushSub(); // re-bind this phone's alerts to the fresh menu id
   toast(url.indexOf(CFG.menuPage) === 0 ? 'Fresh menu link ready — the old one is dead.' : 'Old link revoked; new short link when back online.');
 }
 // guest side: refetch the live payload so 86'd bottles reach their phones
@@ -2263,6 +2356,8 @@ function openMenuPicker(){
     '<div class="mp-pane hidden" data-p="2">' + bwPane + '</div>' +
     '<div class="mp-pane hidden" data-p="3">' + featPane + '</div>' +
     '<div class="mp-pane hidden" data-p="4">' + themePane + '</div>' +
+    '<label class="rowline" style="gap:8px;margin-top:14px"><input type="checkbox" id="mp-closed"' + (S.menuClosed ? ' checked' : '') + ' style="width:auto;transform:scale(1.2)">' +
+    '<span>Close the bar <span class="dim small">(guests see a closed sign; flip it back anytime — same link)</span></span></label>' +
     '<div style="display:flex;gap:8px;margin-top:14px"><button class="abtn ghost" id="mp-all">Show everything</button>' +
     '<button class="abtn" id="mp-save" style="flex:1">Save</button></div>');
   document.getElementById('mp-tabs').addEventListener('click', e => {
@@ -2276,6 +2371,10 @@ function openMenuPicker(){
     document.querySelectorAll('#modal .thsw').forEach(x => x.classList.toggle('on', x === sw));
     applyMenuTheme(); // repaints live behind the sheet
   }));
+  document.getElementById('mp-closed').addEventListener('change', e => {
+    S.menuClosed = e.target.checked;
+    save(); renderMenu(); // repaints live and pushes the closed flag to guests
+  });
   const bwListEl = document.getElementById('mp-bwlist');
   const renderBwList = () => {
     bwListEl.innerHTML = bwWork.length ? bwWork.map((n,i) =>
@@ -2723,6 +2822,16 @@ function openSettings(){
     '<label class="rowline" style="gap:8px;margin-top:14px"><input type="checkbox" id="st-nerd" style="width:auto;transform:scale(1.15)"' + (S.nerdMode ? ' checked' : '') + '>' +
     '<span>Liquid Intelligence in recipe details <span class="dim small">(chilling &amp; dilution physics for stirred and shaken drinks)</span></span></label>' +
     (S.geo ? '<button class="abtn ghost" id="st-geo-forget" style="width:100%;margin-top:12px">Forget my location</button>' : '') +
+    '<hr class="sep"><h3 class="serif" style="color:var(--brass2)">Drink-request alerts</h3>' +
+    (!pushSupported()
+      ? '<div class="small mut" style="margin:4px 0 6px">Get a ping when a guest requests a drink. Needs the installed app — Share &rarr; Add to Home Screen, then come back here.</div>'
+      : pushPermission() === 'denied'
+        ? '<div class="small mut" style="margin:4px 0 6px">Notifications are blocked for this app — enable them in your phone&rsquo;s Settings &rarr; Notifications, then come back here.</div>'
+        : (S.pushOn && pushPermission() === 'granted')
+          ? '<div class="small mut" style="margin:4px 0 10px">On — this phone gets a ping when a guest requests a drink.</div>' +
+            '<button class="abtn ghost" id="st-push-off" style="width:100%">Turn off alerts</button>'
+          : '<div class="small mut" style="margin:4px 0 10px">Get a ping the moment a guest taps a drink on your shared menu — even with the app closed.</div>' +
+            '<button class="abtn ghost" id="st-push-on" style="width:100%">&#128276; Alert me about drink requests</button>') +
     '<hr class="sep"><h3 class="serif" style="color:var(--brass2)">Backup</h3>' +
     (storageFull ? '<div class="small" style="color:var(--bad);margin:6px 0">Storage is full — recent changes may not be saved. Remove wishlist photos or export a backup.</div>' : '') +
     '<div class="small mut" style="margin:4px 0 10px">Your bar lives only in this browser — export a backup now and then.</div>' +
@@ -2751,6 +2860,10 @@ function openSettings(){
     S.geo = null; S.geoAsked = false; _wx = { at:0, data:null };
     save(); openSettings(); toast('Location forgotten.');
   };
+  const pushOn = document.getElementById('st-push-on');
+  if(pushOn) pushOn.onclick = enablePush;
+  const pushOff = document.getElementById('st-push-off');
+  if(pushOff) pushOff.onclick = disablePush;
   const syncOn = document.getElementById('st-sync-on');
   if(syncOn) syncOn.onclick = () => { enableSync(); openSettings(); toast('Cloud backup is on — copy your code and keep it safe.'); };
   const codeEl = document.getElementById('st-code');
@@ -2850,6 +2963,7 @@ setTab('shelf');
   if(p) enterSharedMenu(p);
 })();
 bootSyncCheck(); // heads-up if the cloud copy is newer than this device
+if(S.pushOn) ensurePushSub(); // quiet re-bind: subscriptions rotate, menu ids get refreshed
 </script>
 </body>
 </html>

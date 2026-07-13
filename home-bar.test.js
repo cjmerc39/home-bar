@@ -38,6 +38,16 @@ const dom = new JSDOM(html, {
         if(opts && opts.method === 'DELETE'){ w.__reqStore = []; return { ok:true, status:200, json: async () => ({ ok:true }) }; }
         return { ok:true, status:200, json: async () => ({ requests: (w.__reqStore||[]).map((x,i) => ({ d:x.drink, g:x.guest, at:1700000000000+i })) }) };
       }
+      if(u.includes('/push')){
+        if(u.includes('/push/vapid')) return { ok:true, status:200, json: async () => ({ key:'BFakeKey' }) };
+        w.__pushPosts = w.__pushPosts || [];
+        if(opts && opts.method === 'POST'){
+          w.__pushPosts.push({ auth: String(opts.headers && (opts.headers.Authorization||opts.headers.authorization) || ''), body: String(opts.body||'') });
+          return { ok:true, status:200, json: async () => ({ ok:true }) };
+        }
+        if(opts && opts.method === 'DELETE'){ w.__pushDeletes = (w.__pushDeletes||0)+1; return { ok:true, status:200, json: async () => ({ ok:true }) }; }
+        return { ok:false, status:404, json: async () => ({}) };
+      }
       if(u.includes('/menu')){
         if(opts && opts.method === 'POST'){
           if(w.__menuPostFail) return { ok:false, status:500, json: async () => ({ error:'kv down' }) };
@@ -1106,6 +1116,59 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('importJSON('+JSON.stringify(sipBackup)+')')===null, 'backup with sip flags imports');
   assert(w.eval('S.bottles.find(b=>b.name==="Pappy 15").sip')===true, 'the flag survives export → wipe → import');
   w.eval('deleteBottle(S.bottles.find(b=>b.name==="Pappy 15").id)'); await sleep(20);
+
+  // ================= close the bar, keep the link =================
+  assert(w.eval('S.menuClosed')===false && w.eval('S.pushOn')===false, 'closed and push default off');
+  assert(w.eval('fresh().menuClosed')===false && w.eval('fresh().pushOn')===false, 'fresh state carries the defaults');
+  w.eval('setTab("menu")'); await sleep(30);
+  w.eval('openMenuPicker()'); await sleep(20);
+  const mpClosed = d.getElementById('mp-closed');
+  assert(mpClosed!==null && mpClosed.checked===false, 'the curate sheet offers Close the bar');
+  mpClosed.checked = true; mpClosed.dispatchEvent(new w.Event('change')); await sleep(30);
+  assert(w.eval('S.menuClosed')===true && w.eval('menuPayload().cl')===true, 'closing persists and rides the payload');
+  w.eval('closeModal()'); await sleep(10);
+  assert(d.getElementById('menu-closedband')!==null, 'the host sees a quiet closed band, menu still editable');
+  w.eval('setTab("shelf")'); await sleep(10);
+  w.eval('enterSharedMenu({ t:"CJ Bar", c:[{n:"Negroni",d:"x",h:false}], s:[], th:"golden", cl:true })'); await sleep(30);
+  assert(d.getElementById('menu-closed')!==null && /closed tonight/.test(d.getElementById('menu-body').textContent), 'guests get a closed sign, not the menu');
+  assert(d.querySelectorAll('#menu-body .mitem').length===0, 'no drinks and no request taps while closed');
+  w.eval('delete sharedMenu.cl; renderMenu();'); await sleep(20);
+  assert(d.querySelectorAll('#menu-body .mitem').length===1, 'reopening brings the SAME link back to life');
+  w.eval('sharedMenu=null; setTab("shelf"); S.menuClosed=false; save();'); await sleep(10);
+  const clBackup = JSON.parse(w.eval('exportJSON()'));
+  delete clBackup.menuClosed; delete clBackup.pushOn;
+  assert(w.eval('importJSON('+JSON.stringify(JSON.stringify(clBackup))+')')===null, 'a pre-close backup imports');
+  assert(w.eval('S.menuClosed')===false && w.eval('S.pushOn')===false, 'missing fields default off on import');
+
+  // ================= drink-request push alerts =================
+  w.eval('openSettings()'); await sleep(20);
+  assert(/Add to Home Screen/.test(d.getElementById('modal').textContent), 'no push support: settings explains the install step');
+  w.eval('closeModal()');
+  w.eval('window.Notification = { permission:"default", requestPermission: async () => { window.Notification.permission = "granted"; return "granted"; } };' +
+    'window.PushManager = function(){};' +
+    'window.__fakeSub = { endpoint:"https://push.example/ep1", keys:{ p256dh:"pk", auth:"au" }, toJSON(){ return { endpoint:this.endpoint, keys:this.keys }; }, unsubscribe: async () => true };' +
+    'window.__fakeReg = { pushManager: { getSubscription: async () => null, subscribe: async (o) => { window.__subOpts = o; return window.__fakeSub; } } };' +
+    'Object.defineProperty(navigator, "serviceWorker", { configurable:true, value: { register: async () => window.__fakeReg, getRegistration: async () => window.__fakeReg } });');
+  w.__pushPosts = [];
+  await w.enablePush(); await sleep(60);
+  assert(w.eval('S.pushOn')===true, 'enabling alerts flips the flag after permission');
+  assert(w.__pushPosts.length>=1, 'the subscription registers with the worker');
+  const pp = w.__pushPosts[w.__pushPosts.length-1];
+  assert(pp.auth==='Bearer '+'a'.repeat(32) && JSON.parse(pp.body).endpoint==='https://push.example/ep1', 'registration is owner-gated and carries the endpoint');
+  assert(/Turn off alerts/.test(d.getElementById('modal').textContent), 'settings shows alerts are on');
+  w.eval('window.__fakeReg.pushManager.getSubscription = async () => window.__fakeSub;');
+  await w.disablePush(); await sleep(40);
+  assert(w.eval('S.pushOn')===false && w.__pushDeletes===1, 'turning off unsubscribes locally and at the worker');
+  w.eval('closeModal()');
+  // a worker identity change (new VAPID key) self-heals instead of wedging forever
+  w.eval('S.pushOn = true; save(); window.__unsubs = 0;' +
+    'window.__staleSub = { endpoint:"https://push.example/old", keys:{ p256dh:"pk", auth:"au" }, options:{ applicationServerKey: new Uint8Array([9,9,9]).buffer }, toJSON(){ return { endpoint:this.endpoint, keys:this.keys }; }, unsubscribe: async () => { window.__unsubs++; return true; } };' +
+    'window.__fakeReg.pushManager.getSubscription = async () => window.__staleSub;');
+  w.__pushPosts = [];
+  const healed = await w.ensurePushSub(); await sleep(30);
+  assert(healed===true && w.eval('window.__unsubs')===1, 'a stale VAPID binding is dropped, not re-posted');
+  assert(w.__pushPosts.length===1 && JSON.parse(w.__pushPosts[0].body).endpoint==='https://push.example/ep1', 'and a fresh subscription takes its place');
+  w.eval('S.pushOn = false; save();');
 
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');

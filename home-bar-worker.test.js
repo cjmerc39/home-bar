@@ -26,11 +26,19 @@ function makeEnv(){
   };
 }
 
-// stub api.anthropic.com — records request bodies, answers per __anthropicReply
+// stub api.anthropic.com — records request bodies, answers per __anthropicReply.
+// push.test endpoints are recorded separately (binary bodies, controllable status).
 let anthropicCalls = [];
 let anthropicReply = null;
+let pushCalls = [];
+let pushStatus = 201;
 globalThis.fetch = async (url, opts) => {
-  anthropicCalls.push({ url: String(url), body: JSON.parse(opts.body) });
+  const u = String(url);
+  if (u.startsWith('https://push.test/')) {
+    pushCalls.push({ url: u, headers: opts.headers, body: opts.body });
+    return { ok: pushStatus < 300, status: pushStatus, json: async () => ({}) };
+  }
+  anthropicCalls.push({ url: u, body: JSON.parse(opts.body) });
   return { ok: true, status: 200, json: async () => anthropicReply };
 };
 const textReply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], stop_reason: 'end_turn' });
@@ -42,7 +50,7 @@ const jbody = (o) => ({ method: 'POST', headers: { 'content-type': 'application/
   const assert = (c, m) => { if(!c){ console.error('FAIL:', m); process.exitCode = 1; } else console.log('ok  :', m); };
   const worker = loadWorker();
   const env = makeEnv();
-  const call = (path, opts) => worker.fetch(req(path, opts), env);
+  const call = (path, opts, ctx) => worker.fetch(req(path, opts), env, ctx);
 
   // --- CORS preflight ---
   let r = await call('/scan', { method: 'OPTIONS' });
@@ -167,6 +175,82 @@ const jbody = (o) => ({ method: 'POST', headers: { 'content-type': 'application/
   j = await r.json();
   stored = JSON.parse(env.__store.get('m:' + j.id));
   assert(stored.th === 'golden' && stored.su === undefined, 'an unknown theme falls back to golden; a bogus sunset is dropped');
+
+  // --- the closed flag rides the payload, literal true only ---
+  r = await call('/menu', jbody({ t: 'Closed Bar', c: [], s: [], cl: true }));
+  j = await r.json();
+  assert(JSON.parse(env.__store.get('m:' + j.id)).cl === true, 'cl:true survives the payload whitelist');
+  r = await call('/menu', jbody({ t: 'Open Bar', c: [], s: [], cl: 'yes' }));
+  j = await r.json();
+  assert(JSON.parse(env.__store.get('m:' + j.id)).cl === undefined, 'only a literal true closes the bar');
+
+  // --- Web Push: VAPID identity, owner-gated subscriptions, encrypted send, pruning ---
+  const { webcrypto } = require('crypto');
+  const b64u = (b) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  r = await call('/push/vapid', { method: 'GET' });
+  j = await r.json();
+  assert(r.status === 200 && typeof j.key === 'string' && j.key.length > 80, 'a VAPID key is minted on first ask');
+  const vapidKey = j.key;
+  r = await call('/push/vapid', { method: 'GET' });
+  j = await r.json();
+  assert(j.key === vapidKey, 'the VAPID identity persists in KV — same key every ask');
+
+  r = await call('/menu', jbody({ t: 'Push Bar', c: [{ n: 'Negroni', d: 'x', h: false }], s: [] }));
+  j = await r.json();
+  const pid = j.id, powner = j.owner;
+  // a REAL client keypair, so we can decrypt exactly what a phone would receive
+  const ckp = await webcrypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const cpubRaw = Buffer.from(await webcrypto.subtle.exportKey('raw', ckp.publicKey));
+  const cauth = webcrypto.getRandomValues(new Uint8Array(16));
+  const sub = { endpoint: 'https://push.test/send/abc', keys: { p256dh: b64u(cpubRaw), auth: b64u(cauth) } };
+  r = await call('/menu/' + pid + '/push', { method: 'POST', headers: { authorization: 'Bearer ' + 'f'.repeat(32) }, body: JSON.stringify(sub) });
+  assert(r.status === 403, 'push subscribe with the wrong owner is 403');
+  r = await call('/menu/' + pid + '/push', { method: 'POST', headers: { authorization: 'Bearer ' + powner }, body: JSON.stringify(sub) });
+  assert(r.status === 200 && env.__store.has('push:' + pid), 'push subscribe stores the subscription');
+  r = await call('/menu/' + pid + '/push', { method: 'POST', headers: { authorization: 'Bearer ' + powner }, body: JSON.stringify(sub) });
+  assert(JSON.parse(env.__store.get('push:' + pid)).length === 1, 'resubscribing the same endpoint does not duplicate');
+  r = await call('/menu/' + pid + '/push', { method: 'POST', headers: { authorization: 'Bearer ' + powner }, body: JSON.stringify({ endpoint: 'http://insecure', keys: {} }) });
+  assert(r.status === 400, 'a malformed subscription is refused');
+
+  pushCalls = [];
+  const ctx1 = { promises: [], waitUntil(p) { this.promises.push(p); } };
+  r = await call('/menu/' + pid + '/req', jbody({ drink: 'Negroni', guest: 'Maria' }), ctx1);
+  assert(r.status === 200, 'the guest request is accepted');
+  await Promise.all(ctx1.promises);
+  assert(pushCalls.length === 1, 'a request fires one push per subscribed phone');
+  const pc = pushCalls[0];
+  assert(/^vapid t=[^,]+\.[^,]+\.[^,]+, k=/.test(pc.headers.authorization), 'the push carries a VAPID JWT');
+  assert(pc.headers['content-encoding'] === 'aes128gcm', 'the payload is aes128gcm-encrypted');
+  // decrypt as the phone would (RFC 8291 receiver side) — proves the crypto end to end
+  const body = new Uint8Array(pc.body);
+  const salt = body.slice(0, 16), idlen = body[20], ephPub = body.slice(21, 21 + idlen), ct = body.slice(21 + idlen);
+  assert(idlen === 65 && ephPub[0] === 4, 'header carries the ephemeral P-256 point');
+  const ephKey = await webcrypto.subtle.importKey('raw', ephPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const shared = new Uint8Array(await webcrypto.subtle.deriveBits({ name: 'ECDH', public: ephKey }, ckp.privateKey, 256));
+  const hk = async (s2, ikm, info, len) => {
+    const k = await webcrypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await webcrypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: s2, info }, k, len * 8));
+  };
+  const te = new TextEncoder();
+  const ikm = await hk(cauth, shared, Buffer.concat([Buffer.from(te.encode('WebPush: info\0')), cpubRaw, Buffer.from(ephPub)]), 32);
+  const cek = await hk(salt, ikm, te.encode('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hk(salt, ikm, te.encode('Content-Encoding: nonce\0'), 12);
+  const aes = await webcrypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['decrypt']);
+  let plain = new Uint8Array(await webcrypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, aes, ct));
+  while (plain.length && plain[plain.length - 1] === 0) plain = plain.slice(0, -1);
+  assert(plain[plain.length - 1] === 2, 'the record ends with the final-record delimiter');
+  const note = JSON.parse(Buffer.from(plain.slice(0, -1)).toString('utf8'));
+  assert(/Negroni/.test(note.title) && /Maria/.test(note.body), 'the decrypted notification names the drink and the guest');
+
+  pushStatus = 410; pushCalls = [];
+  const ctx2 = { promises: [], waitUntil(p) { this.promises.push(p); } };
+  await call('/menu/' + pid + '/req', jbody({ drink: 'Daiquiri' }), ctx2);
+  await Promise.all(ctx2.promises);
+  assert(JSON.parse(env.__store.get('push:' + pid)).length === 0, 'a gone (410) subscription is pruned');
+  pushStatus = 201;
+  await call('/menu/' + pid + '/push', { method: 'POST', headers: { authorization: 'Bearer ' + powner }, body: JSON.stringify(sub) });
+  await call('/menu/' + pid, { method: 'DELETE', headers: { authorization: 'Bearer ' + powner } });
+  assert(!env.__store.has('push:' + pid), 'revoking the menu link clears its push subscriptions too');
 
   console.log(process.exitCode ? '\nSOME TESTS FAILED' : '\nall green');
 })();

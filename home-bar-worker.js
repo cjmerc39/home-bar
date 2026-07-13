@@ -108,7 +108,7 @@ const SCAN_SCHEMA = {
 };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const cors = {
       'access-control-allow-origin': env.ALLOWED_ORIGIN || '*',
       'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -120,8 +120,12 @@ export default {
     if (path === '/recipe' && request.method === 'POST') return recipe(request, env, cors);
     if (path === '/sync') return sync(request, env, cors);
     if (path === '/bartender' && request.method === 'POST') return bartender(request, env, cors);
+    if (path === '/push/vapid' && request.method === 'GET') return pushVapid(env, cors);
+    const mPush = /^\/menu\/([A-Za-z0-9]{4,32})\/push$/.exec(path);
+    if (mPush && request.method === 'POST') return pushSub(mPush[1], request, env, cors);
+    if (mPush && request.method === 'DELETE') return pushUnsub(mPush[1], request, env, cors);
     const mReq = /^\/menu\/([A-Za-z0-9]{4,32})\/req$/.exec(path);
-    if (mReq && request.method === 'POST') return reqAdd(mReq[1], request, env, cors);
+    if (mReq && request.method === 'POST') return reqAdd(mReq[1], request, env, cors, ctx);
     if (mReq && request.method === 'GET') return reqList(mReq[1], request, env, cors);
     if (mReq && request.method === 'DELETE') return reqClear(mReq[1], request, env, cors);
     if (path === '/menu' && request.method === 'POST') return menuCreate(request, env, cors);
@@ -382,7 +386,7 @@ async function bartender(request, env, cors) {
 }
 
 /* ---- /menu/:id/req : guest drink requests ---- */
-async function reqAdd(id, request, env, cors) {
+async function reqAdd(id, request, env, cors, ctx) {
   if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
   const menu = await env.MENUS.get('m:' + id);
   if (!menu) return json({ error: 'menu expired' }, 404, cors);
@@ -397,7 +401,154 @@ async function reqAdd(id, request, env, cors) {
   if (list.length >= 100) return json({ error: 'the request box is full' }, 429, cors);
   list.push({ d: drink, g: guest, at: Date.now() });
   await env.MENUS.put('req:' + id, JSON.stringify(list), { expirationTtl: MENU_TTL });
+  // ping the host's phone(s) — after the response, never delaying the guest
+  const ping = pushAll(env, id, {
+    title: '\u{1F378} ' + drink,
+    body: guest ? guest + ' would love one.' : 'A guest would love one.',
+    tag: 'req-' + id,
+  });
+  if (ctx && ctx.waitUntil) ctx.waitUntil(ping); else ping.catch(() => {});
   return json({ ok: true, count: list.length }, 200, cors);
+}
+
+/* ---- Web Push: VAPID + RFC 8291 aes128gcm, WebCrypto only, zero deps ----
+   The worker mints and persists its own VAPID keypair in KV on first use, so
+   there is nothing to configure. Subscriptions are stored per menu id (owner-
+   gated), pinged on every guest request, and pruned when the push service says
+   they're gone (404/410). */
+function b64uEnc(buf) {
+  let s = '';
+  const u = new Uint8Array(buf);
+  for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64uDec(s) {
+  s = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+function concatBytes(...arrs) {
+  const out = new Uint8Array(arrs.reduce((a, x) => a + x.length, 0));
+  let o = 0;
+  for (const a of arrs) { out.set(a, o); o += a.length; }
+  return out;
+}
+async function getVapid(env) {
+  let jwks = null;
+  try { jwks = JSON.parse(await env.MENUS.get('vapid:keys')); } catch (e) {}
+  if (!jwks || !jwks.priv || !jwks.pub) {
+    const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    jwks = { priv: await crypto.subtle.exportKey('jwk', kp.privateKey), pub: await crypto.subtle.exportKey('jwk', kp.publicKey) };
+    await env.MENUS.put('vapid:keys', JSON.stringify(jwks)); // no TTL — the key IS the identity
+  }
+  const privKey = await crypto.subtle.importKey('jwk', jwks.priv, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const rawPub = concatBytes(new Uint8Array([4]), b64uDec(jwks.pub.x), b64uDec(jwks.pub.y)); // 65-byte uncompressed point
+  return { privKey, rawPub };
+}
+async function pushVapid(env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  const { rawPub } = await getVapid(env);
+  return json({ key: b64uEnc(rawPub) }, 200, cors);
+}
+async function vapidAuth(env, endpoint) {
+  const { privKey, rawPub } = await getVapid(env);
+  const enc = new TextEncoder();
+  const header = b64uEnc(enc.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const claims = b64uEnc(enc.encode(JSON.stringify({
+    aud: new URL(endpoint).origin,
+    exp: Math.floor(Date.now() / 1000) + 12 * 3600,
+    sub: 'mailto:cj13mercado@msn.com',
+  })));
+  const unsigned = header + '.' + claims;
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privKey, enc.encode(unsigned));
+  return 'vapid t=' + unsigned + '.' + b64uEnc(sig) + ', k=' + b64uEnc(rawPub);
+}
+async function hkdf(salt, ikm, info, len) { // extract + expand in one, per RFC 5869
+  const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, key, len * 8));
+}
+async function encryptPayload(sub, payload) { // RFC 8291: one aes128gcm record
+  const enc = new TextEncoder();
+  const clientPub = b64uDec(sub.keys.p256dh);   // 65-byte P-256 point
+  const authSecret = b64uDec(sub.keys.auth);    // 16-byte shared auth secret
+  const eph = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const clientKey = await crypto.subtle.importKey('raw', clientPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: clientKey }, eph.privateKey, 256));
+  const ephRaw = new Uint8Array(await crypto.subtle.exportKey('raw', eph.publicKey));
+  const ikm = await hkdf(authSecret, shared, concatBytes(enc.encode('WebPush: info\0'), clientPub, ephRaw), 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, enc.encode('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdf(salt, ikm, enc.encode('Content-Encoding: nonce\0'), 12);
+  const aesKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const plain = concatBytes(enc.encode(JSON.stringify(payload)), new Uint8Array([2])); // 0x02 = final-record delimiter
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, aesKey, plain));
+  const head = concatBytes(salt, new Uint8Array([0, 0, 16, 0]), new Uint8Array([65]), ephRaw); // rs=4096, keyid=eph pub
+  return concatBytes(head, ct);
+}
+async function sendPush(env, sub, payload) {
+  try {
+    const body = await encryptPayload(sub, payload);
+    const r = await fetch(sub.endpoint, {
+      method: 'POST',
+      headers: {
+        'authorization': await vapidAuth(env, sub.endpoint),
+        'content-encoding': 'aes128gcm',
+        'content-type': 'application/octet-stream',
+        'ttl': '300', 'urgency': 'high',
+      },
+      body,
+    });
+    return r.status;
+  } catch (e) { return 0; } // unreachable push service: keep the subscription
+}
+async function pushAll(env, id, payload) {
+  if (!env.MENUS) return;
+  let subs = [];
+  try { subs = JSON.parse(await env.MENUS.get('push:' + id) || '[]'); } catch (e) {}
+  if (!Array.isArray(subs) || !subs.length) return;
+  const keep = [];
+  for (const s of subs) {
+    const st = await sendPush(env, s, payload);
+    if (st !== 404 && st !== 410) keep.push(s); // gone subscriptions get pruned
+  }
+  // rewrite even when unchanged: every delivered request keeps the subs' TTL
+  // as alive as the menu the guests are using
+  await env.MENUS.put('push:' + id, JSON.stringify(keep), { expirationTtl: MENU_TTL });
+}
+function cleanSub(x) {
+  if (!x || typeof x.endpoint !== 'string' || !/^https:\/\//.test(x.endpoint) || x.endpoint.length > 1024) return null;
+  const k = x.keys || {};
+  if (typeof k.p256dh !== 'string' || typeof k.auth !== 'string' || k.p256dh.length > 200 || k.auth.length > 64) return null;
+  return { endpoint: x.endpoint, keys: { p256dh: k.p256dh, auth: k.auth } };
+}
+async function pushSub(id, request, env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  if (!(await menuOwnerOk(id, request, env))) return json({ error: 'forbidden' }, 403, cors);
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: 'bad request body' }, 400, cors); }
+  const sub = cleanSub(body);
+  if (!sub) return json({ error: 'not a push subscription' }, 400, cors);
+  let subs = [];
+  try { subs = JSON.parse(await env.MENUS.get('push:' + id) || '[]'); } catch (e) {}
+  if (!Array.isArray(subs)) subs = [];
+  subs = subs.filter((s) => s && s.endpoint !== sub.endpoint).concat([sub]).slice(-5); // a handful of devices, newest kept
+  await env.MENUS.put('push:' + id, JSON.stringify(subs), { expirationTtl: MENU_TTL });
+  return json({ ok: true, count: subs.length }, 200, cors);
+}
+async function pushUnsub(id, request, env, cors) {
+  if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
+  if (!(await menuOwnerOk(id, request, env))) return json({ error: 'forbidden' }, 403, cors);
+  let body;
+  try { body = await request.json(); } catch (e) { body = {}; }
+  const ep = String(body && body.endpoint || '');
+  let subs = [];
+  try { subs = JSON.parse(await env.MENUS.get('push:' + id) || '[]'); } catch (e) {}
+  subs = (Array.isArray(subs) ? subs : []).filter((s) => s && s.endpoint !== ep);
+  await env.MENUS.put('push:' + id, JSON.stringify(subs), { expirationTtl: MENU_TTL });
+  return json({ ok: true, count: subs.length }, 200, cors);
 }
 async function reqList(id, request, env, cors) {
   if (!env.MENUS) return json({ error: 'KV namespace MENUS not bound' }, 500, cors);
@@ -441,6 +592,7 @@ function cleanMenuPayload(p) {
   // menu theme + the host's sunset epoch, so guests dim with the actual room
   out.th = MENU_THEMES.includes(p.th) ? p.th : 'golden';
   if (typeof p.su === 'number' && isFinite(p.su) && p.su > 0) out.su = Math.round(p.su);
+  if (p.cl === true) out.cl = true; // the bar is closed: guests see a closed sign, the link stays alive
   return out;
 }
 const MENU_THEMES = ['golden', 'deco', 'blanc', 'cassis', 'nochebuena'];
@@ -497,6 +649,7 @@ async function menuDelete(id, request, env, cors) {
   await env.MENUS.delete('m:' + id);
   await env.MENUS.delete('o:' + id);
   await env.MENUS.delete('req:' + id);
+  await env.MENUS.delete('push:' + id);
   return json({ ok: true }, 200, cors);
 }
 async function menuGet(id, env, cors) {
