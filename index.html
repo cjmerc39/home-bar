@@ -277,8 +277,20 @@ body.menuMode[data-theme="nochebuena"][data-dusk]{--m-bg:#0c1812;--m-accent:#c19
 /* lagoon: tiki hour — deep teal, coral, sand. Deliberately NOT walnut-and-gold. */
 body.menuMode[data-theme="lagoon"]{--m-bg:#0e2a28;--m-ink:#f2ead8;--m-mut:#cfc3a6;--m-dim:#7fa096;--m-accent:#ef8a6d;--m-rule:#3f6b64;--m-vig:.55}
 body.menuMode[data-theme="lagoon"][data-dusk]{--m-bg:#091e1d;--m-accent:#d97a5f}
-/* clair de lune: ink navy & moonlight — the cool one; silver where the others go gold */
-body.menuMode[data-theme="lune"]{--m-bg:#0f1b2d;--m-ink:#e9eef6;--m-mut:#b9c6da;--m-dim:#6f809c;--m-accent:#9db1cf;--m-rule:#3c4d68;--m-vig:.6}
+/* clair de lune: ink navy & moonlight — the cool one; silver where the others go gold.
+   The sky is real: five speckle layers tiling at different periods scatter soft
+   star-points with no repeats the eye can catch. Pure CSS, nothing literal —
+   and at dusk the ground darkens so the stars simply come forward. */
+body.menuMode[data-theme="lune"]{--m-bg:#0f1b2d;--m-ink:#e9eef6;--m-mut:#b9c6da;--m-dim:#6f809c;--m-accent:#9db1cf;--m-rule:#3c4d68;--m-vig:.6;
+  background-image:
+    radial-gradient(1.6px 1.6px at 71% 23%, rgba(240,244,252,.9) 48%, transparent 52%),
+    radial-gradient(1.4px 1.4px at 18% 57%, rgba(233,238,246,.75) 48%, transparent 52%),
+    radial-gradient(1.1px 1.1px at 22% 14%, rgba(233,238,246,.65) 46%, transparent 54%),
+    radial-gradient(1px 1px at 64% 41%, rgba(200,215,235,.5) 46%, transparent 54%),
+    radial-gradient(1.1px 1.1px at 39% 68%, rgba(233,238,246,.6) 46%, transparent 54%),
+    radial-gradient(1px 1px at 86% 82%, rgba(200,215,235,.45) 46%, transparent 54%),
+    radial-gradient(1px 1px at 9% 89%, rgba(233,238,246,.55) 46%, transparent 54%);
+  background-size: 640px 640px, 520px 520px, 340px 340px, 260px 260px, 420px 420px, 300px 300px, 380px 380px;}
 body.menuMode[data-theme="lune"][data-dusk]{--m-bg:#0a1220;--m-accent:#8ba0c0}
 /* rosewood: rose gold in low light — warm without a drop of yellow */
 body.menuMode[data-theme="rosewood"]{--m-bg:#26141a;--m-ink:#f6e8e4;--m-mut:#d4b3ac;--m-dim:#92707a;--m-accent:#d49a8b;--m-rule:#6e4048;--m-vig:.75}
