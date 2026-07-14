@@ -1308,6 +1308,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(d.getElementById('rd-steps')!==null && d.querySelectorAll('#rd-steps .step').length===dqSteps.length, 'the detail sheet walks the build step by step');
   w.eval('closeModal()'); await sleep(10);
 
+  // ================= a tapped alert opens the spec =================
+  assert(w.eval('handleSpecHash("#spec=' + encodeURIComponent('Daiquiri') + '")')===true, 'the #spec= hash from a cold-start alert is recognized');
+  await sleep(30);
+  assert(d.getElementById('modalwrap').classList.contains('on') && d.querySelector('#modal h2').textContent.includes('Daiquiri')
+    && d.getElementById('rd-steps')!==null, 'it lands on the full Daiquiri spec, build steps and all');
+  w.eval('closeModal()'); await sleep(10);
+  assert(w.eval('openSpecByName("Corn \'n Oil")')===true, 'the warm-app path (service worker message) resolves names too');
+  await sleep(20);
+  assert(d.querySelector('#modal h2').textContent.includes("Corn 'n Oil"), 'and opens the right sheet');
+  w.eval('closeModal()'); await sleep(10);
+  assert(w.eval('openSpecByName("Zombie Apocalypse")')===false && w.eval('handleSpecHash("#s=abc123")')===false, 'unknown drinks toast politely; other hashes pass through untouched');
+  w.eval('setTab("shelf")'); await sleep(10);
+
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
 

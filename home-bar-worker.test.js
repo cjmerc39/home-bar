@@ -265,6 +265,7 @@ const jbody = (o) => ({ method: 'POST', headers: { 'content-type': 'application/
   assert(plain[plain.length - 1] === 2, 'the record ends with the final-record delimiter');
   const note = JSON.parse(Buffer.from(plain.slice(0, -1)).toString('utf8'));
   assert(/Negroni/.test(note.title) && /Maria/.test(note.body), 'the decrypted notification names the drink and the guest');
+  assert(note.drink === 'Negroni' && note.url === './#spec=Negroni', 'the payload carries the spec deep-link for a tapped alert');
 
   pushStatus = 410; pushCalls = [];
   const ctx2 = { promises: [], waitUntil(p) { this.promises.push(p); } };

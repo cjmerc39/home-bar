@@ -509,11 +509,14 @@ async function reqAdd(id, request, env, cors, ctx) {
   if (list.length >= 100) return json({ error: 'the request box is full' }, 429, cors);
   list.push({ d: drink, g: guest, at: Date.now() });
   await env.MENUS.put('req:' + id, JSON.stringify(list), { expirationTtl: MENU_TTL });
-  // ping the host's phone(s) — after the response, never delaying the guest
+  // ping the host's phone(s) — after the response, never delaying the guest.
+  // url + drink let a tapped alert open straight to the drink's spec.
   const ping = pushAll(env, id, {
     title: '\u{1F378} ' + drink,
     body: guest ? guest + ' would love one.' : 'A guest would love one.',
     tag: 'req-' + id,
+    url: './#spec=' + encodeURIComponent(drink),
+    drink,
   });
   if (ctx && ctx.waitUntil) ctx.waitUntil(ping); else ping.catch(() => {});
   return json({ ok: true, count: list.length }, 200, cors);
