@@ -326,7 +326,9 @@ async function bartender(request, env, cors) {
   let body;
   try { body = await request.json(); } catch (e) { return json({ error: 'bad request body' }, 400, cors); }
   const mood = String(body && body.mood || '').slice(0, 300);
-  const drinks = (Array.isArray(body && body.drinks) ? body.drinks : []).slice(0, 80).map((x) => ({
+  // 160, not 80: the client seeds 81 classics plus house drinks — an 80 cap
+  // silently cut the end of a deep shelf (the client also sends house first)
+  const drinks = (Array.isArray(body && body.drinks) ? body.drinks : []).slice(0, 160).map((x) => ({
     name: String(x && x.name || '').slice(0, 80),
     base: String(x && x.base || '').slice(0, 20),
     rating: Math.max(0, Math.min(5, parseInt(x && x.rating, 10) || 0)),
@@ -414,7 +416,7 @@ async function concierge(request, env, cors) {
   if (!env.ANTHROPIC_API_KEY) return json({ error: 'ANTHROPIC_API_KEY secret not set on the worker' }, 500, cors);
   let body;
   try { body = await request.json(); } catch (e) { return json({ error: 'bad request body' }, 400, cors); }
-  const drinks = (Array.isArray(body && body.drinks) ? body.drinks : []).slice(0, 80).map((x) => ({
+  const drinks = (Array.isArray(body && body.drinks) ? body.drinks : []).slice(0, 160).map((x) => ({
     name: String(x && x.name || '').slice(0, 80),
     base: String(x && x.base || '').slice(0, 20),
     rating: Math.max(0, Math.min(5, parseInt(x && x.rating, 10) || 0)),
@@ -435,8 +437,12 @@ async function concierge(request, env, cors) {
   const brief = 'You are the concierge of a small, warm home bar, composing tonight\'s guest menu WITH the host. ' +
     'HARD RULE: only drinks from the DRINKS list below may appear in menu.picks or menu.feature — each name copied EXACTLY; ' +
     'never invent a drink. The list already contains only what the shelf can make right now. ' +
-    'Fit the menu to the occasion, crowd, and hour: tight and confident (usually 5-9 cocktails), varied across base spirits, ' +
-    'high-rated and house (their own creations) drinks favored. Pick a feature drink with a short label like "drink of the night" ' +
+    'Fit the menu to the occasion, crowd, hour, and the calendar — TONIGHT below carries the date, so serve the season: ' +
+    'hot, rich, and holiday drinks belong to the cold months, bright cooling ones to the heat, and an out-of-season ' +
+    'special (a holiday cream drink at a summer pool party) never makes the menu unless the host asks for it. ' +
+    'Tight and confident (usually 5-9 cocktails), varied across base spirits; high-rated and house (their own creations) ' +
+    'drinks favored WHEN they fit the occasion — a beloved house drink still sits out a night that is wrong for it. ' +
+    'Pick a feature drink with a short label like "drink of the night" ' +
     'when the occasion invites one. You may suggest a visual theme by key: golden (walnut & brass, the default), ' +
     'deco (black & champagne, art deco), blanc (light printed-paper menu), cassis (wine-dark purple, candlelit), ' +
     'nochebuena (holiday pine & oxblood), lagoon (teal & coral, tiki), lune (ink navy & moonlit silver, cool and starry), ' +

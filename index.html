@@ -217,8 +217,9 @@ span.scanthumb{display:block;background:var(--bg2)}
 #galaxy .star.lw .core,#galaxy .star.lw .glow,#galaxy .star.lw .core-star{fill:var(--low)}
 #galaxy .star.dim .core{fill:#4d3e2b}
 #galaxy .star.dim .core-star{fill:#5a4933}
-#galaxy .slabel{font-family:var(--serif);font-size:10.5px;fill:var(--mut);paint-order:stroke;stroke:#211913;stroke-width:2.6px;stroke-linejoin:round}
+#galaxy .slabel{font-family:var(--serif);font-size:9.2px;fill:var(--mut);paint-order:stroke;stroke:#211913;stroke-width:2.4px;stroke-linejoin:round}
 #galaxy .star.lw .slabel{fill:var(--low)}
+#galaxy .lead{stroke:var(--mut);stroke-width:.7;opacity:.4}
 #galaxy .star.faded{opacity:.16}
 .gx-axis{font-size:9px;letter-spacing:2.4px;text-transform:uppercase;fill:var(--dim)}
 /* liquid intelligence */
@@ -1055,24 +1056,66 @@ function starJitter(id){ // deterministic — overlapping stars separate the sam
   for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0;
   return { dx: ((h % 97)/96 - .5) * 9, dy: (((h >>> 8) % 89)/88 - .5) * 9 };
 }
-function starXY(r){ // final field position, in the 400×400 viewBox
-  const p = flavorPos(r), j = starJitter(r.id), pad = 26, F = 400;
-  return { x: Math.round((pad + p.x*(F-2*pad) + j.dx)*10)/10,
-           y: Math.round((pad + (1-p.y)*(F-2*pad) + j.dy)*10)/10 };
+function starXY(r){ // final field position, in the 400×540 viewBox (portrait, like the phone it lives on)
+  const p = flavorPos(r), j = starJitter(r.id), pad = 26, FW = 400, FH = 540;
+  return { x: Math.round((pad + p.x*(FW-2*pad) + j.dx)*10)/10,
+           y: Math.round((pad + (1-p.y)*(FH-2*pad) + j.dy)*10)/10 };
 }
 // A crowded sky turns labels into mush, so labels are placed greedily with
-// collision checks: right of the star, else left, below, above — else dropped
-// (the star stays lit and tappable). House drinks always keep their label;
-// higher-rated drinks win contested space. Deterministic, so the sky never
-// reshuffles between renders.
+// collision checks. Candidates fan out in two rings: the snug spots first
+// (right, left, below, above, then the diagonals), and when a neighborhood is
+// packed, a farther ring whose picks draw a hairline leader (lead:[x1,y1,x2,y2])
+// back to their star — the cartographer's trick for dense clusters. Only if
+// every spot in both rings is taken does a label drop (the star stays lit and
+// tappable). House drinks always keep their label; higher-rated drinks win
+// contested space. Deterministic, so the sky never reshuffles between renders.
 function starLabel(name){ return name.length > 14 ? name.slice(0, 13) + '…' : name; }
-function starLabelW(name){ return starLabel(name).length * 5.6 + 6; }
+function starLabelW(name){ return starLabel(name).length * 5.0 + 5; }
 const STAR_LABEL_CAND = [
   { dx:9,  dy:3.5, anchor:'start'  },
   { dx:-9, dy:3.5, anchor:'end'    },
   { dx:0,  dy:16,  anchor:'middle' },
   { dx:0,  dy:-10, anchor:'middle' },
+  { dx:8,  dy:-7,  anchor:'start'  },
+  { dx:8,  dy:14,  anchor:'start'  },
+  { dx:-8, dy:-7,  anchor:'end'    },
+  { dx:-8, dy:14,  anchor:'end'    },
+  { dx:22, dy:3.5, anchor:'start',  lead:[5,0,19,0] },
+  { dx:-22,dy:3.5, anchor:'end',    lead:[-5,0,-19,0] },
+  { dx:0,  dy:28,  anchor:'middle', lead:[0,6,0,20] },
+  { dx:0,  dy:-22, anchor:'middle', lead:[0,-6,0,-15] },
+  { dx:16, dy:-15, anchor:'start',  lead:[4,-4,13,-13] },
+  { dx:16, dy:21,  anchor:'start',  lead:[4,4,13,14] },
+  { dx:-16,dy:-15, anchor:'end',    lead:[-4,-4,-13,-13] },
+  { dx:-16,dy:21,  anchor:'end',    lead:[-4,4,-13,14] },
+  // third ring — long leaders let a packed cluster's names spill into open sky
+  { dx:36, dy:3.5, anchor:'start',  lead:[5,0,33,0] },
+  { dx:-36,dy:3.5, anchor:'end',    lead:[-5,0,-33,0] },
+  { dx:0,  dy:42,  anchor:'middle', lead:[0,6,0,34] },
+  { dx:0,  dy:-36, anchor:'middle', lead:[0,-6,0,-29] },
+  { dx:26, dy:-25, anchor:'start',  lead:[4,-4,23,-23] },
+  { dx:26, dy:31,  anchor:'start',  lead:[4,4,23,24] },
+  { dx:-26,dy:-25, anchor:'end',    lead:[-4,-4,-23,-23] },
+  { dx:-26,dy:31,  anchor:'end',    lead:[-4,4,-23,24] },
 ];
+// outer rings, generated: the deep-cluster escape hatch. Compass points per
+// radius (denser and finer-grained the farther out, alternate rings rotated so
+// the leaders fan instead of stacking), every pick tethered to its star by a
+// hairline leader. The far radii exist for the heart of the sour cluster,
+// where two dozen names genuinely cannot sit beside their stars.
+for(const [ri, rad] of [48, 62, 80, 100, 120, 145, 172, 200].entries()){
+  const n = rad >= 80 ? 16 : 8;
+  for(let k = 0; k < n; k++){
+    const a = (k * 360 / n + (ri % 2) * (180 / n)) * Math.PI / 180;
+    const ux = Math.cos(a), uy = Math.sin(a);
+    const r1 = v => Math.round(v * 10) / 10;
+    STAR_LABEL_CAND.push({
+      dx: r1(ux * rad), dy: r1(uy * rad + 3.5),
+      anchor: Math.abs(ux) < .38 ? 'middle' : ux > 0 ? 'start' : 'end',
+      lead: [r1(ux * 5), r1(uy * 5), r1(ux * (rad - 4)), r1(uy * (rad - 4))],
+    });
+  }
+}
 function layoutStarLabels(stars){ // stars: [{id,x,y,name,house,rating}] -> {id: candidate|null}
   const order = stars.slice().sort((a,z) =>
     (a.house?0:1) - (z.house?0:1) || (z.rating||0) - (a.rating||0) || a.name.localeCompare(z.name) || (a.id < z.id ? -1 : 1));
@@ -1086,7 +1129,7 @@ function layoutStarLabels(stars){ // stars: [{id,x,y,name,house,rating}] -> {id:
       const x0 = c.anchor === 'start' ? s.x + c.dx : c.anchor === 'end' ? s.x + c.dx - w : s.x - w/2;
       const y0 = s.y + c.dy - 9;
       const box = { x0, y0, x1: x0 + w, y1: y0 + H };
-      if(box.x0 < 4 || box.x1 > 396 || box.y0 < 20 || box.y1 > 388) continue;
+      if(box.x0 < 4 || box.x1 > 396 || box.y0 < 20 || box.y1 > 528) continue;
       if(placed.some(p => box.x0 < p.x1 && p.x0 < box.x1 && box.y0 < p.y1 && p.y0 < box.y1)) continue;
       pick = c; placed.push(box); break;
     }
@@ -1902,10 +1945,15 @@ function openGeoAsk(){ // once, on first bartender use — never on boot, never 
 
 /* ============================== AI bartender ============================== */
 function makeableDrinkList(){ // what the shelf can pour RIGHT NOW — all any AI ever sees
+  // House drinks lead, then by rating, so the relay's list cap can never
+  // silently cut the host's own creations off the end. Recipe notes ride with
+  // the ingredients ("serve hot", "Christmas Eve pour") — the model can't
+  // judge seasonal fit from a bare ingredient list.
   return S.recipes.filter(r => recipeStatus(r).makeable).map(r => ({
     name: r.name, base: recipeBase(r), rating: r.rating||0, house: !!r.house,
-    low: recipeStatus(r).low, ingredients: autoDesc(r),
-  }));
+    low: recipeStatus(r).low,
+    ingredients: (autoDesc(r) + ((r.notes||'').trim() ? ' — ' + (r.notes||'').trim() : '')).slice(0, 200),
+  })).sort((a,z) => (z.house?1:0) - (a.house?1:0) || (z.rating||0) - (a.rating||0));
 }
 async function requestBartender(mood){
   const drinks = makeableDrinkList();
@@ -1994,13 +2042,17 @@ async function ccSend(){
   if(again) again.focus();
 }
 async function requestConcierge(){
+  const wx = await fetchWeather(); // wait for the sky — the first message deserves the weather too
   const body = {
     history: _ccHistory.slice(-12).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', text: String(m.text).slice(0, 600) })),
     drinks: makeableDrinkList(),
     beerWine: S.beerWine.slice(0, 20),
     context: {
-      time: new Date().toLocaleString([], { weekday:'long', hour:'numeric', minute:'2-digit' }),
-      weather: _wx.data ? wxLineText(_wx.data) : ''
+      // the full date, not just the hour — a July pool party and a November
+      // Friendsgiving need different menus, and the model can't smell the
+      // season through a clock
+      time: new Date().toLocaleString([], { weekday:'long', month:'long', day:'numeric', hour:'numeric', minute:'2-digit' }),
+      weather: wx ? wxLineText(wx) : ''
     }
   };
   const r = await fetch(CFG.conciergeUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
@@ -2375,20 +2427,23 @@ function renderSpecsSky(list){
     else if(s.cls === 'dim') parts.push('<circle class="core" r="2"/>');
     else parts.push('<circle class="glow" r="9"/><circle class="core" r="3.2"/>');
     const c = labels[s.id];
-    if(c) parts.push('<text class="slabel" x="', c.dx, '" y="', c.dy, '" text-anchor="', c.anchor, '">', esc(starLabel(s.name)), '</text>');
+    if(c){
+      if(c.lead) parts.push('<line class="lead" x1="', c.lead[0], '" y1="', c.lead[1], '" x2="', c.lead[2], '" y2="', c.lead[3], '"/>');
+      parts.push('<text class="slabel" x="', c.dx, '" y="', c.dy, '" text-anchor="', c.anchor, '">', esc(starLabel(s.name)), '</text>');
+    }
     parts.push('</g>');
     (s.cls === 'dim' && !s.house ? dimStars : litStars).push(parts.join(''));
   }
-  list.innerHTML = '<svg id="galaxy" viewBox="0 0 400 400">' +
+  list.innerHTML = '<svg id="galaxy" viewBox="0 0 400 540">' +
     '<defs><radialGradient id="gvig" cx="50%" cy="45%" r="72%">' +
     '<stop offset="55%" stop-color="rgba(0,0,0,0)"/><stop offset="100%" stop-color="rgba(0,0,0,.55)"/></radialGradient></defs>' +
-    '<rect x="1" y="1" width="398" height="398" rx="14" fill="var(--bg2)"/>' +
-    '<rect x="1" y="1" width="398" height="398" rx="14" fill="url(#gvig)"/>' +
-    '<rect x="1" y="1" width="398" height="398" rx="14" fill="none" stroke="var(--line)"/>' +
-    '<text class="gx-axis" x="12" y="203">bitter</text>' +
-    '<text class="gx-axis" x="388" y="203" text-anchor="end">bright</text>' +
+    '<rect x="1" y="1" width="398" height="538" rx="14" fill="var(--bg2)"/>' +
+    '<rect x="1" y="1" width="398" height="538" rx="14" fill="url(#gvig)"/>' +
+    '<rect x="1" y="1" width="398" height="538" rx="14" fill="none" stroke="var(--line)"/>' +
+    '<text class="gx-axis" x="12" y="273">bitter</text>' +
+    '<text class="gx-axis" x="388" y="273" text-anchor="end">bright</text>' +
     '<text class="gx-axis" x="200" y="16" text-anchor="middle">refreshing</text>' +
-    '<text class="gx-axis" x="200" y="391" text-anchor="middle">boozy</text>' +
+    '<text class="gx-axis" x="200" y="531" text-anchor="middle">boozy</text>' +
     dimStars.join('') + litStars.join('') + '</svg>' +
     (dimStars.length || litStars.length ? '' : '<div class="dim" style="padding:20px 4px">No recipes match.</div>');
   list.querySelectorAll('#galaxy .star').forEach(g => g.addEventListener('click', () => openRecipeDetail(g.getAttribute('data-id'))));

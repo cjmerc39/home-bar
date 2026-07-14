@@ -179,6 +179,14 @@ const jbody = (o) => ({ method: 'POST', headers: { 'content-type': 'application/
   const ccMsgs = anthropicCalls[0].body.messages;
   assert(/HARD RULE/.test(ccMsgs[0].content) && /94° and humid/.test(ccMsgs[0].content) && /Modelo/.test(ccMsgs[0].content), 'the brief carries the rule, the night, and the beer list');
   assert(ccMsgs[ccMsgs.length - 1].content === 'taco night for six', 'the host message closes the conversation');
+  assert(/serve the season/.test(ccMsgs[0].content) && /WHEN they fit the occasion/.test(ccMsgs[0].content), 'the brief demands seasonal fit — no coquito at a pool party');
+  // deep-shelf cap: 81 seeds + house drinks must all reach the model
+  anthropicCalls = [];
+  anthropicReply = textReply({ reply: 'ok' });
+  const bigList = Array.from({ length: 170 }, (_, i) => ({ name: 'Drink ' + (i + 1), base: 'gin', rating: 0, house: false, low: false, ingredients: 'x' }));
+  r = await call('/concierge', jbody({ history: [{ role: 'user', text: 'big night' }], drinks: bigList }));
+  const bigBrief = anthropicCalls[0].body.messages[0].content;
+  assert(/"Drink 160"/.test(bigBrief) && !/"Drink 161"/.test(bigBrief), 'the drink cap admits 160 — a stocked shelf is never silently cut at 80');
   anthropicReply = textReply({ reply: 'Hmm.', menu: { picks: ['Nothing Real'] } });
   r = await call('/concierge', jbody({ history: [{ role: 'user', text: 'x' }], drinks: btDrinks }));
   j = await r.json();
