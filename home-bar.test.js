@@ -1321,6 +1321,17 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('openSpecByName("Zombie Apocalypse")')===false && w.eval('handleSpecHash("#s=abc123")')===false, 'unknown drinks toast politely; other hashes pass through untouched');
   w.eval('setTab("shelf")'); await sleep(10);
 
+  // ================= the in-app request inbox opens specs too =================
+  w.__reqStore = [{ drink:'Daiquiri', guest:'Maria' }];
+  await w.openRequestInbox(); await sleep(60);
+  const rqRow = d.querySelector('#modal .rq-row');
+  assert(rqRow!==null && rqRow.dataset.drink==='Daiquiri', 'inbox rows are tappable and carry their drink');
+  rqRow.click(); await sleep(30);
+  assert(d.querySelector('#modal h2').textContent.includes('Daiquiri') && d.getElementById('rd-steps')!==null,
+    'tapping an in-app request opens the full spec');
+  w.eval('closeModal()'); await sleep(10);
+  w.__reqStore = [];
+
   // stop the pollers so node can exit cleanly
   w.eval('stopBellPoll(); stopDusk(); if(_guestT){clearInterval(_guestT); _guestT=null;}');
 
