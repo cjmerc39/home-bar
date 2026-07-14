@@ -309,8 +309,9 @@ body.menuMode[data-theme="blanc"] #view-menu{background-image:repeating-linear-g
 body.menuMode[data-theme="blanc"] .menu-rule{position:relative;overflow:visible}
 body.menuMode[data-theme="blanc"] .menu-rule::after{content:'\2766';position:absolute;left:50%;top:-11px;transform:translateX(-50%);background:var(--m-bg);padding:0 8px;color:var(--m-accent);font-size:15px;line-height:1}
 body.menuMode.m-anim .menu-rule::after{transition:background-color 8s ease,color 8s ease}
-/* cassis: one candle's glow pooled behind the title, at the head of the page */
-body.menuMode[data-theme="cassis"] #view-menu{background-image:radial-gradient(420px 300px at 50% 110px,rgba(255,186,120,.09),transparent 70%);background-repeat:no-repeat}
+/* cassis: one candle's glow — ROOM light, fixed to the screen while the page
+   scrolls beneath it (owner's call, and the right physics) */
+body.menuMode[data-theme="cassis"]{background-image:radial-gradient(420px 300px at 50% 96px,rgba(255,186,120,.09),transparent 70%)}
 /* nochebuena: pine sprigs, wrapping-paper sparse — ONE small sprig per big tile */
 body.menuMode[data-theme="nochebuena"] #view-menu{background-image:
   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 340'%3E%3Cg transform='translate(42 100)' fill='none' stroke='%234a6b57' stroke-opacity='.4' stroke-width='1.1' stroke-linecap='round'%3E%3Cpath d='M5 21 L21 5'/%3E%3Cpath d='M9 17 L5 11'/%3E%3Cpath d='M12 14 L8 8'/%3E%3Cpath d='M15 11 L11 5'/%3E%3Cpath d='M9 17 L15 21'/%3E%3Cpath d='M12 14 L18 18'/%3E%3Cpath d='M15 11 L21 15'/%3E%3C/g%3E%3C/svg%3E"),
@@ -319,12 +320,16 @@ body.menuMode[data-theme="nochebuena"] #view-menu{background-image:
 /* lagoon: the dividers ripple */
 body.menuMode[data-theme="lagoon"] .msec::before,body.menuMode[data-theme="lagoon"] .msec::after{border-top:0;height:6px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 6'%3E%3Cpath d='M0 3 Q6.5 0 13 3 T26 3' fill='none' stroke='%237fa096' stroke-opacity='.8' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x center/26px 6px;opacity:.8}
 body.menuMode[data-theme="lagoon"] .menu-rule{border-top:0;height:6px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 6'%3E%3Cpath d='M0 3 Q6.5 0 13 3 T26 3' fill='none' stroke='%237fa096' stroke-opacity='.8' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x center/26px 6px;opacity:.85}
-/* rosewood: a green stem climbs the margin and blooms into the rose at the title */
+/* rosewood v2 (owner's design): a looser rose at the crown, its stem swinging
+   left before diving down the margin — and at the foot it turns the corner,
+   runs right, and trails off in tendril circles. One bloom, one exit. */
 body.menuMode[data-theme="rosewood"] #view-menu{position:relative;padding-left:30px;padding-right:30px}
-body.menuMode[data-theme="rosewood"] #view-menu::after{content:'';position:absolute;left:5px;top:calc(54px + env(safe-area-inset-top));width:26px;height:92px;
-  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 92'%3E%3Cpath d='M13 92 C8 78 16 68 13 58' fill='none' stroke='%237d8f6d' stroke-opacity='.6' stroke-width='1.3' stroke-linecap='round'/%3E%3Cpath d='M13 76 C6 73 3 66 6 61 C11 64 13 70 13 76 Z' fill='none' stroke='%237d8f6d' stroke-opacity='.55' stroke-width='1.1'/%3E%3Cpath d='M13 52 C3 52 0 40 5 31 C10 23 21 24 24 32 C27 40 21 49 13 47 C6 45 5 37 10 33 C14 30 19 33 18 38 C17 42 12 43 12 39' fill='none' stroke='%23d49a8b' stroke-opacity='.95' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center top/26px 92px}
-body.menuMode[data-theme="rosewood"] #view-menu::before{content:'';position:absolute;left:5px;top:calc(146px + env(safe-area-inset-top));bottom:18px;width:26px;
-  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 150'%3E%3Cg fill='none' stroke='%237d8f6d' stroke-width='1.3' stroke-linecap='round'%3E%3Cpath d='M13 0 C8 25 18 50 13 75 C8 100 18 125 13 150' stroke-opacity='.55'/%3E%3Cpath d='M10 42 C4 38 2 30 5 26 C10 29 12 36 10 42 Z' stroke-opacity='.5' stroke-width='1.1'/%3E%3Cpath d='M16 117 C22 113 24 105 21 101 C16 104 14 111 16 117 Z' stroke-opacity='.5' stroke-width='1.1'/%3E%3C/g%3E%3C/svg%3E") repeat-y center top/26px 150px}
+body.menuMode[data-theme="rosewood"] #view-menu::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 100'%3E%3Cpath d='M15 52 C5 52 2 39 8 30 C14 22 26 25 28 34 C30 43 22 51 15 48 C10 46 10 38 15 36' fill='none' stroke='%23d49a8b' stroke-opacity='.95' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M15 52 C7 62 5 76 10 88 C12 93 14 96 15 100' fill='none' stroke='%237d8f6d' stroke-opacity='.6' stroke-width='1.3' stroke-linecap='round'/%3E%3Cpath d='M11 78 C17 75 19 68 16 64 C12 67 10 73 11 78 Z' fill='none' stroke='%237d8f6d' stroke-opacity='.5' stroke-width='1.1'/%3E%3C/svg%3E") no-repeat left 3px top calc(52px + env(safe-area-inset-top)) / 30px 100px,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 44'%3E%3Cg fill='none' stroke='%237d8f6d' stroke-width='1.3' stroke-linecap='round'%3E%3Cpath d='M13 0 C13 12 14 22 15 26 C17 35 25 38 36 38 C58 38 74 36 96 38' stroke-opacity='.6'/%3E%3Cpath d='M62 38 C58 31 50 29 46 32 C49 37 56 39 62 38 Z' stroke-opacity='.5' stroke-width='1.1'/%3E%3Ccircle cx='106' cy='34' r='5' stroke-opacity='.55'/%3E%3Ccircle cx='116' cy='36.5' r='2.6' stroke-opacity='.5'/%3E%3C/g%3E%3C/svg%3E") no-repeat left 5px bottom 14px / 150px 44px}
+body.menuMode[data-theme="rosewood"] #view-menu::before{content:'';position:absolute;left:5px;top:calc(152px + env(safe-area-inset-top));bottom:58px;width:26px;pointer-events:none;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 150'%3E%3Cg fill='none' stroke='%237d8f6d' stroke-width='1.3' stroke-linecap='round'%3E%3Cpath d='M13 0 C10 25 16 50 13 75 C10 100 16 125 13 150' stroke-opacity='.55'/%3E%3Cpath d='M10 42 C4 38 2 30 5 26 C10 29 12 36 10 42 Z' stroke-opacity='.5' stroke-width='1.1'/%3E%3Cpath d='M16 117 C22 113 24 105 21 101 C16 104 14 111 16 117 Z' stroke-opacity='.5' stroke-width='1.1'/%3E%3C/g%3E%3C/svg%3E") repeat-y center top/26px 150px}
 /* pop-ups over a themed menu (guest request sheet, curate sheet, toasts) wear the theme */
 body.menuMode{--m-panel:var(--bg2)}
 body.menuMode[data-theme="deco"]{--m-panel:#101014}
