@@ -277,6 +277,12 @@ body.menuMode[data-theme="nochebuena"][data-dusk]{--m-bg:#0c1812;--m-accent:#c19
 /* lagoon: tiki hour — deep teal, coral, sand. Deliberately NOT walnut-and-gold. */
 body.menuMode[data-theme="lagoon"]{--m-bg:#0e2a28;--m-ink:#f2ead8;--m-mut:#cfc3a6;--m-dim:#7fa096;--m-accent:#ef8a6d;--m-rule:#3f6b64;--m-vig:.55}
 body.menuMode[data-theme="lagoon"][data-dusk]{--m-bg:#091e1d;--m-accent:#d97a5f}
+/* clair de lune: ink navy & moonlight — the cool one; silver where the others go gold */
+body.menuMode[data-theme="lune"]{--m-bg:#0f1b2d;--m-ink:#e9eef6;--m-mut:#b9c6da;--m-dim:#6f809c;--m-accent:#9db1cf;--m-rule:#3c4d68;--m-vig:.6}
+body.menuMode[data-theme="lune"][data-dusk]{--m-bg:#0a1220;--m-accent:#8ba0c0}
+/* rosewood: rose gold in low light — warm without a drop of yellow */
+body.menuMode[data-theme="rosewood"]{--m-bg:#26141a;--m-ink:#f6e8e4;--m-mut:#d4b3ac;--m-dim:#92707a;--m-accent:#d49a8b;--m-rule:#6e4048;--m-vig:.75}
+body.menuMode[data-theme="rosewood"][data-dusk]{--m-bg:#1b0e13;--m-accent:#c48a7c}
 /* pop-ups over a themed menu (guest request sheet, curate sheet, toasts) wear the theme */
 body.menuMode{--m-panel:var(--bg2)}
 body.menuMode[data-theme="deco"]{--m-panel:#101014}
@@ -284,6 +290,8 @@ body.menuMode[data-theme="blanc"]{--m-panel:#fbf5ea}
 body.menuMode[data-theme="cassis"]{--m-panel:#2c2135}
 body.menuMode[data-theme="nochebuena"]{--m-panel:#17281f}
 body.menuMode[data-theme="lagoon"]{--m-panel:#123430}
+body.menuMode[data-theme="lune"]{--m-panel:#16233a}
+body.menuMode[data-theme="rosewood"]{--m-panel:#2e1a21}
 body.menuMode #modal{background:var(--m-panel);border-color:var(--m-rule);color:var(--m-ink)}
 body.menuMode #modal h2,body.menuMode #modal h3{color:var(--m-accent)}
 body.menuMode #modal .mut,body.menuMode #modal .fieldlbl{color:var(--m-mut)}
@@ -585,7 +593,7 @@ function seedRecipes(){
 /* ============================== state ============================== */
 let S = null;
 function fresh(){ return { v:1, bottles:[], recipes:seedRecipes(), staples:DEFAULT_STAPLES.slice(), menuTitle:"CJ's Bar", collapsedCats:[], wishlist:[], menuSelection:null, pourSelection:null, featureId:null, featureLabel:'drink of the night', beerWine:[], customBW:[], menuId:null, menuOwner:null, savedAt:0, shelfView:'list', specsView:'list', nerdMode:false, menuTheme:'golden', geo:null, geoAsked:false, menuClosed:false, pushOn:false }; }
-const THEME_KEYS = ['golden','deco','blanc','cassis','nochebuena','lagoon'];
+const THEME_KEYS = ['golden','deco','blanc','cassis','nochebuena','lagoon','lune','rosewood'];
 function validTheme(t){ return THEME_KEYS.includes(t) ? t : 'golden'; }
 // geo is rounded to 2 decimals (~1km) before it ever lands in state — the weather
 // doesn't need more and a backup file shouldn't carry a precise home address
@@ -2362,8 +2370,8 @@ function renderMenu(){
   if(sharedMenu && sharedMenu.expired){ // a retired link dead-ends HERE, never in the admin app
     document.getElementById('menu-body').innerHTML =
       '<div class="menu-sign" id="menu-expired"><div class="cbig">Expired</div>' +
-      '<div class="csub">this menu link has been retired</div>' +
-      '<div class="cnote">Ask your host for a fresh invitation.</div></div>';
+      '<div class="csub">this menu is no longer active</div>' +
+      '<div class="cnote">Thanks for stopping by.</div></div>';
     document.getElementById('menu-reqs').classList.add('hidden');
     return;
   }
@@ -2372,7 +2380,7 @@ function renderMenu(){
       '<div class="menu-head">' + esc(p.t) + '</div><hr class="menu-rule">' +
       '<div class="menu-sign" id="menu-closed"><div class="cbig">Closed</div>' +
       '<div class="csub">until next time</div>' +
-      '<div class="cnote">The bar is resting tonight. Thanks for coming &mdash; this link wakes up with it.</div></div>';
+      '<div class="cnote">The bar is resting tonight. Thanks for coming.</div></div>';
     document.getElementById('menu-reqs').classList.add('hidden');
     return; // the guest poll keeps watching — reopening brings the menu back live
   }
@@ -2507,7 +2515,9 @@ async function rotateMenuLink(){ // revoke last month's link, mint a fresh one
   if(S.menuId && S.menuOwner && CFG.menuUrl){
     try{ await fetch(CFG.menuUrl + '/' + S.menuId, { method:'DELETE', headers:{ 'Authorization':'Bearer ' + S.menuOwner } }); }catch(e){}
   }
-  S.menuId = null; S.menuOwner = null; _menuPush = { key:null, url:null }; save();
+  S.menuId = null; S.menuOwner = null; _menuPush = { key:null, url:null };
+  S.menuClosed = false; // a fresh link starts with the bar OPEN — retiring ends the event, closing doesn't carry over
+  save();
   const url = await ensureMenuLink();
   if(S.pushOn) ensurePushSub(); // re-bind this phone's alerts to the fresh menu id
   toast(url.indexOf(CFG.menuPage) === 0 ? 'Fresh menu link ready — the old one is dead.' : 'Old link revoked; new short link when back online.');
@@ -2578,6 +2588,8 @@ function openMenuPicker(){
     { key:'cassis',     name:'Cassis',        tag:'wine-dark, candlelit',  bg:'#241a2b', ink:'#c9b8d4', accent:'#c2a35c' },
     { key:'nochebuena', name:'Nochebuena',    tag:'pine &amp; oxblood',    bg:'#12211a', ink:'#f1e6d0', accent:'#cfa54b' },
     { key:'lagoon',     name:'Lagoon',        tag:'teal &amp; coral, tiki hour', bg:'#0e2a28', ink:'#f2ead8', accent:'#ef8a6d' },
+    { key:'lune',       name:'Clair de Lune', tag:'ink navy &amp; moonlight',    bg:'#0f1b2d', ink:'#e9eef6', accent:'#9db1cf' },
+    { key:'rosewood',   name:'Rosewood',      tag:'rose gold, low light',        bg:'#26141a', ink:'#f6e8e4', accent:'#d49a8b' },
   ];
   const themePane = '<div class="small mut" style="margin-bottom:8px">How the menu dresses for guests — the bar itself stays walnut. Each dims on its own at sundown.</div>' +
     THEME_META.map(t => '<button class="thsw' + (S.menuTheme === t.key ? ' on' : '') + '" data-th="' + t.key +

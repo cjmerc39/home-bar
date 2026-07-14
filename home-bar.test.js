@@ -1031,8 +1031,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('openMenuPicker()'); await sleep(20);
   const themeTab = [...d.querySelectorAll('#mp-tabs button')].find(b=>b.textContent==='Theme');
   themeTab.click(); await sleep(20);
-  assert(d.querySelectorAll('#modal .thsw').length===6, 'the theme pane offers six swatches');
+  assert(d.querySelectorAll('#modal .thsw').length===8, 'the theme pane offers eight swatches');
   assert(d.querySelector('#modal .thsw[data-th="lagoon"]')!==null && w.eval('validTheme("lagoon")')==='lagoon', 'Lagoon is a first-class theme');
+  assert(w.eval('validTheme("lune")')==='lune' && w.eval('validTheme("rosewood")')==='rosewood', 'Clair de Lune and Rosewood are first-class themes');
   d.querySelector('#modal .thsw[data-th="cassis"]').click(); await sleep(20);
   assert(w.eval('S.menuTheme')==='cassis' && d.body.getAttribute('data-theme')==='cassis', 'picking a swatch persists and repaints live');
   assert(d.querySelector('#modal .thsw[data-th="cassis"]').classList.contains('on'), 'the picked swatch is marked');
@@ -1191,10 +1192,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('openMenuPicker()'); await sleep(20);
   assert(d.getElementById('mp-retire')!==null, 'the curate sheet offers Retire this link');
   const oldMenuId = w.eval('S.menuId');
+  w.eval('S.menuClosed=true; save();'); // retire while closed: the next event must not inherit the closed sign
   w.__menuDeleted = ''; w.__menuPosts = 0;
   d.getElementById('mp-retire').click(); await sleep(150);
   assert(String(w.__menuDeleted).includes('/menu/'+oldMenuId), 'retiring revokes the old link at the worker — expired for old guests, for good');
   assert(w.eval('S.menuId')==='abc123' && w.__menuPosts===1, 'and a brand-new link is minted for the next event');
+  assert(w.eval('S.menuClosed')===false, 'retiring reopens the bar — the fresh link never starts closed');
   w.eval('setTab("shelf")'); await sleep(10);
   // a guest refreshing a retired link dead-ends at an Expired sign, never the admin app
   w.__menuGetGone = true;

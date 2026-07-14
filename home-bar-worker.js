@@ -439,7 +439,8 @@ async function concierge(request, env, cors) {
     'high-rated and house (their own creations) drinks favored. Pick a feature drink with a short label like "drink of the night" ' +
     'when the occasion invites one. You may suggest a visual theme by key: golden (walnut & brass, the default), ' +
     'deco (black & champagne, art deco), blanc (light printed-paper menu), cassis (wine-dark purple, candlelit), ' +
-    'nochebuena (holiday pine & oxblood), lagoon (teal & coral, tiki). ' +
+    'nochebuena (holiday pine & oxblood), lagoon (teal & coral, tiki), lune (ink navy & moonlit silver, cool and starry), ' +
+    'rosewood (rose gold in low light, warm and romantic). ' +
     'reply = 1-3 warm sentences as a colleague: the shape of your proposal, or ONE pointed question if you truly need it. ' +
     'Include the menu object whenever you propose or revise a concrete lineup; refine it as the host reacts.' +
     '\n\nTONIGHT: ' + (time || 'unknown hour') + (weather ? ' · ' + weather : '') +
@@ -704,7 +705,7 @@ function cleanMenuPayload(p) {
   if (p.cl === true) out.cl = true; // the bar is closed: guests see a closed sign, the link stays alive
   return out;
 }
-const MENU_THEMES = ['golden', 'deco', 'blanc', 'cassis', 'nochebuena', 'lagoon']; // informational — validation is slug-shaped
+const MENU_THEMES = ['golden', 'deco', 'blanc', 'cassis', 'nochebuena', 'lagoon', 'lune', 'rosewood']; // informational — validation is slug-shaped
 function menuId() {
   const a = crypto.getRandomValues(new Uint8Array(8));
   return [...a].map((b) => (b % 36).toString(36)).join('');
