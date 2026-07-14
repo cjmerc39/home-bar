@@ -281,7 +281,9 @@ body.menuMode[data-theme="lagoon"][data-dusk]{--m-bg:#091e1d;--m-accent:#d97a5f}
    The sky is real: five speckle layers tiling at different periods scatter soft
    star-points with no repeats the eye can catch. Pure CSS, nothing literal —
    and at dusk the ground darkens so the stars simply come forward. */
-body.menuMode[data-theme="lune"]{--m-bg:#0f1b2d;--m-ink:#e9eef6;--m-mut:#b9c6da;--m-dim:#6f809c;--m-accent:#9db1cf;--m-rule:#3c4d68;--m-vig:.6;
+body.menuMode[data-theme="lune"]{--m-bg:#0f1b2d;--m-ink:#e9eef6;--m-mut:#b9c6da;--m-dim:#6f809c;--m-accent:#9db1cf;--m-rule:#3c4d68;--m-vig:.6}
+/* the sky is painted on the MENU, not the room, so the stars scroll with the page */
+body.menuMode[data-theme="lune"] #view-menu{
   background-image:
     radial-gradient(1.6px 1.6px at 71% 23%, rgba(240,244,252,.9) 48%, transparent 52%),
     radial-gradient(1.4px 1.4px at 18% 57%, rgba(233,238,246,.75) 48%, transparent 52%),
@@ -302,15 +304,15 @@ body.menuMode[data-theme="deco"] .mitem.feature{position:relative}
 body.menuMode[data-theme="deco"] .mitem.feature::before,body.menuMode[data-theme="deco"] .mitem.feature::after{content:'';position:absolute;width:16px;height:16px;border:0 solid var(--m-accent);opacity:.9}
 body.menuMode[data-theme="deco"] .mitem.feature::before{top:-6px;left:-6px;border-top-width:2px;border-left-width:2px}
 body.menuMode[data-theme="deco"] .mitem.feature::after{bottom:-6px;right:-6px;border-bottom-width:2px;border-right-width:2px}
-/* blanc: laid paper + a printer's fleuron on the title rule */
-body.menuMode[data-theme="blanc"]{background-image:repeating-linear-gradient(0deg,rgba(60,45,25,.025) 0 1px,transparent 1px 4px)}
+/* blanc: laid paper + a printer's fleuron on the title rule (grain rides the page) */
+body.menuMode[data-theme="blanc"] #view-menu{background-image:repeating-linear-gradient(0deg,rgba(60,45,25,.025) 0 1px,transparent 1px 4px)}
 body.menuMode[data-theme="blanc"] .menu-rule{position:relative;overflow:visible}
 body.menuMode[data-theme="blanc"] .menu-rule::after{content:'\2766';position:absolute;left:50%;top:-11px;transform:translateX(-50%);background:var(--m-bg);padding:0 8px;color:var(--m-accent);font-size:15px;line-height:1}
 body.menuMode.m-anim .menu-rule::after{transition:background-color 8s ease,color 8s ease}
-/* cassis: one candle's glow pooled behind the title */
-body.menuMode[data-theme="cassis"]{background-image:radial-gradient(420px 300px at 50% 80px,rgba(255,186,120,.09),transparent 70%)}
+/* cassis: one candle's glow pooled behind the title, at the head of the page */
+body.menuMode[data-theme="cassis"] #view-menu{background-image:radial-gradient(420px 300px at 50% 110px,rgba(255,186,120,.09),transparent 70%);background-repeat:no-repeat}
 /* nochebuena: pine sprigs, wrapping-paper sparse — ONE small sprig per big tile */
-body.menuMode[data-theme="nochebuena"]{background-image:
+body.menuMode[data-theme="nochebuena"] #view-menu{background-image:
   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 340'%3E%3Cg transform='translate(42 100)' fill='none' stroke='%234a6b57' stroke-opacity='.4' stroke-width='1.1' stroke-linecap='round'%3E%3Cpath d='M5 21 L21 5'/%3E%3Cpath d='M9 17 L5 11'/%3E%3Cpath d='M12 14 L8 8'/%3E%3Cpath d='M15 11 L11 5'/%3E%3Cpath d='M9 17 L15 21'/%3E%3Cpath d='M12 14 L18 18'/%3E%3Cpath d='M15 11 L21 15'/%3E%3C/g%3E%3C/svg%3E"),
   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 430 480'%3E%3Cg transform='translate(332 336) scale(-1 1)' fill='none' stroke='%234a6b57' stroke-opacity='.32' stroke-width='1.1' stroke-linecap='round'%3E%3Cpath d='M5 21 L21 5'/%3E%3Cpath d='M9 17 L5 11'/%3E%3Cpath d='M12 14 L8 8'/%3E%3Cpath d='M15 11 L11 5'/%3E%3Cpath d='M9 17 L15 21'/%3E%3Cpath d='M12 14 L18 18'/%3E%3Cpath d='M15 11 L21 15'/%3E%3C/g%3E%3C/svg%3E");
   background-size:300px 340px,430px 480px}
@@ -370,7 +372,8 @@ body.menuMode #modal .cc-card{border-color:var(--m-rule)}
 @media print{
   body.menuMode{--m-bg:#fff !important;--m-ink:#221d17 !important;--m-mut:#5c5344 !important;--m-dim:#8a7d68 !important;--m-accent:#7a5c2e !important;--m-rule:#b9a888 !important;background:#fff !important}
   body.menuMode::before{display:none !important}
-  body.menuMode #menu-exit,body.menuMode #menu-share,body.menuMode #menu-curate,body.menuMode #menu-reqs,body.menuMode #toast{display:none !important}
+  body.menuMode #view-menu{background-image:none !important}
+  body.menuMode #menu-exit,body.menuMode #menu-share,body.menuMode #menu-curate,body.menuMode #menu-tender,body.menuMode #menu-reqs,body.menuMode #toast{display:none !important}
   body.menuMode,body.menuMode main{overflow:visible !important;height:auto !important}
 }
 </style>
