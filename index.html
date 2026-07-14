@@ -480,16 +480,16 @@ const SUBTYPES = {
   tequila:['blanco','reposado','anejo','cristalino'],
   mezcal:['espadin','joven'],
   whiskey:['bourbon','rye','scotch','japanese','irish'],
-  rum:['white','aged','dark','overproof','agricole'],
+  rum:['white','aged','dark','overproof','agricole','cachaca'],
   gin:['london dry','old tom','navy'],
   vodka:[],
   brandy:['cognac','apple','pisco'],
   amaro:['campari','aperol','nonino','averna','fernet','cynar','montenegro'],
-  liqueur:['orange','maraschino','green chartreuse','yellow chartreuse','amaretto','coffee','falernum','absinthe','elderflower'],
+  liqueur:['orange','maraschino','green chartreuse','yellow chartreuse','amaretto','coffee','falernum','absinthe','elderflower','cacao','benedictine','cherry'],
   vermouth:['sweet','dry','blanc'],
   bitters:['aromatic','orange','peychauds','mole','chocolate'],
   wine:['sparkling','red','white','sherry','port'],
-  mixer:['soda water','tonic','ginger beer','grapefruit soda','cola','pineapple juice','grapefruit juice','orgeat'],
+  mixer:['soda water','tonic','ginger beer','grapefruit soda','cola','pineapple juice','grapefruit juice','orange juice','cranberry juice','tomato juice','orgeat'],
   spice:['cinnamon','nutmeg','clove','star anise','vanilla','allspice','ginger'],
   milk:['coconut milk','condensed milk','evaporated milk','cream of coconut','whole milk','oat milk'],
   other:[]
@@ -532,8 +532,11 @@ const TAG_LABELS = {
   'liqueur/amaretto':'amaretto','liqueur/falernum':'falernum','liqueur/absinthe':'absinthe',
   'vermouth/sweet':'sweet vermouth','vermouth/dry':'dry vermouth',
   'bitters/aromatic':'aromatic bitters','bitters/peychauds':"Peychaud's bitters",'bitters/orange':'orange bitters','bitters/mole':'mole bitters',
-  'whiskey/bourbon':'bourbon','whiskey/rye':'rye whiskey','whiskey/scotch':'scotch','whiskey/japanese':'Japanese whisky',
-  'rum/white':'white rum','rum/aged':'aged rum','rum/dark':'dark rum',
+  'liqueur/cacao':'crème de cacao','liqueur/benedictine':'Bénédictine',
+  'amaro/fernet':'fernet',
+  'whiskey/bourbon':'bourbon','whiskey/rye':'rye whiskey','whiskey/scotch':'scotch','whiskey/japanese':'Japanese whisky','whiskey/irish':'Irish whiskey',
+  'rum/white':'white rum','rum/aged':'aged rum','rum/dark':'dark rum','rum/cachaca':'cachaça',
+  'brandy/cognac':'cognac','brandy/pisco':'pisco',
   'tequila/blanco':'blanco tequila','tequila/reposado':'reposado tequila','tequila/anejo':'añejo tequila',
   'wine/sparkling':'sparkling wine'
 };
@@ -552,7 +555,21 @@ const SEED_FLAVORS = {
   r16:[.78,.82], r17:[.80,.70], r18:[.66,.84], r19:[.52,.66], r20:[.84,.74],
   r21:[.68,.61], r22:[.48,.40], r23:[.12,.20], r24:[.50,.05], r25:[.73,.51],
   r26:[.56,.50], r27:[.74,.78], r28:[.78,.74], r29:[.45,.88], r30:[.63,.51],
-  r31:[.30,.30], r32:[.50,.52], r33:[.22,.14], r34:[.48,.16]
+  r31:[.30,.30], r32:[.50,.52], r33:[.22,.14], r34:[.48,.16],
+  // IBA expansion (r35+): same map, same rules. Brandy sours slot in on the dark
+  // edge of the sour band, the amaro highballs (Americano, Garibaldi, Fernandito)
+  // open a bitter-refreshing northwest, tiki/tropical newcomers join the nebula,
+  // and the stirred brown-and-bitter arrivals sink into the boozy south.
+  r35:[.56,.27], r36:[.20,.58], r37:[.74,.46], r38:[.64,.38], r39:[.59,.36],
+  r40:[.60,.41], r41:[.72,.61], r42:[.79,.78], r43:[.18,.12], r44:[.34,.20],
+  r45:[.64,.62], r46:[.70,.68], r47:[.66,.42], r48:[.44,.09], r49:[.29,.15],
+  r50:[.70,.44], r51:[.41,.13], r52:[.30,.52], r53:[.79,.64], r54:[.52,.70],
+  r55:[.59,.49], r56:[.67,.64], r57:[.58,.82], r58:[.46,.24], r59:[.40,.18],
+  r60:[.57,.66], r61:[.82,.86], r62:[.50,.31], r63:[.72,.86], r64:[.64,.56],
+  r65:[.66,.80], r66:[.63,.65], r67:[.66,.76], r68:[.54,.08], r69:[.70,.50],
+  r70:[.66,.58], r71:[.26,.70], r72:[.33,.72], r73:[.52,.38], r74:[.78,.44],
+  r75:[.16,.34], r76:[.60,.59], r77:[.70,.74], r78:[.74,.63], r79:[.58,.70],
+  r80:[.24,.20], r81:[.27,.42]
 };
 // pre-1.2 saves and backups seeded these recipes without coordinates — give an
 // UNPLACED classic its baked spot (an edited or moved one is never touched)
@@ -632,7 +649,104 @@ function seedRecipes(){
     R('r33','Black Manhattan','stir','coupe','brandied cherry','Averna in place of vermouth.',[
       ING('2','oz',T('whiskey','rye')), ING('1','oz',T('amaro','averna')), ING('2','dash',T('bitters','aromatic'))]),
     R('r34','Rum Old Fashioned','stir','rocks','orange + lime twist','Demerara syrup preferred.',[
-      ING('2','oz',T('rum','aged')), ING('1','tsp',ST('sugar')), ING('2','dash',T('bitters','aromatic'))])
+      ING('2','oz',T('rum','aged')), ING('1','tsp',ST('sugar')), ING('2','dash',T('bitters','aromatic'))]),
+    // ---- IBA expansion: The Unforgettables (r35–r50) ----
+    R('r35','Alexander','shake','coupe','grated nutmeg','Equal parts — the brandy Alexander. Dark crème de cacao if you can.',[
+      ING('1','oz',T('brandy','cognac')), ING('1','oz',T('liqueur','cacao')), ING('1','oz',ST('cream'))]),
+    R('r36','Americano','build','rocks','orange slice + lemon twist','The Negroni’s gentler parent.',[
+      ING('1','oz',T('amaro','campari')), ING('1','oz',T('vermouth','sweet')), ING('1','oz',T('mixer','soda water'))]),
+    R('r37','Aviation','shake','coupe','brandied cherry','A bar spoon of crème de violette turns it sky-blue.',[
+      ING('1.5','oz',T('gin')), ING('0.5','oz',T('liqueur','maraschino')), ING('0.5','oz',ST('lemon'))]),
+    R('r38','Between the Sheets','shake','coupe','lemon twist','A Sidecar running on rum too.',[
+      ING('1','oz',T('brandy','cognac')), ING('1','oz',T('rum','white')), ING('1','oz',T('liqueur','orange')), ING('0.75','oz',ST('lemon'))]),
+    R('r39','Brandy Crusta','shake','wine glass','sugar rim + long orange twist','The Sidecar’s ornate 1850s ancestor.',[
+      ING('1.75','oz',T('brandy','cognac')), ING('0.25','oz',T('liqueur','maraschino')), ING('1','bsp',T('liqueur','orange')), ING('0.5','oz',ST('lemon')), ING('1','bsp',ST('simple syrup')), ING('2','dash',T('bitters','aromatic'))]),
+    R('r40','Casino','shake','coupe','lemon twist + cherry','Old Tom gin in the 1900s spec.',[
+      ING('1.33','oz',T('gin')), ING('0.33','oz',T('liqueur','maraschino')), ING('0.33','oz',ST('lemon')), ING('2','dash',T('bitters','orange'))]),
+    R('r41','Clover Club','shake','coupe','raspberries','Dry-shake first for the silky pink head.',[
+      ING('1.5','oz',T('gin')), ING('0.5','oz',ST('raspberry syrup')), ING('0.5','oz',ST('lemon')), ING('1','whole',ST('egg white'))]),
+    R('r42','Gin Fizz','shake','highball','lemon slice','Strain over no ice; the soda does the lifting.',[
+      ING('1.5','oz',T('gin')), ING('1','oz',ST('lemon')), ING('0.33','oz',ST('simple syrup')), ING('2.75','oz',T('mixer','soda water'))]),
+    R('r43','Hanky Panky','stir','coupe','orange twist','Ada Coleman’s Savoy original.',[
+      ING('1.5','oz',T('gin')), ING('1.5','oz',T('vermouth','sweet')), ING('0.25','oz',T('amaro','fernet'))]),
+    R('r44','Martinez','stir','coupe','lemon twist','The Manhattan–Martini missing link. Old Tom gin if you have it.',[
+      ING('1.5','oz',T('gin')), ING('1.5','oz',T('vermouth','sweet')), ING('1','bsp',T('liqueur','maraschino')), ING('2','dash',T('bitters','orange'))]),
+    R('r45','Mary Pickford','shake','coupe','cherry','Prohibition Havana, named for the film star.',[
+      ING('1.5','oz',T('rum','white')), ING('1.5','oz',T('mixer','pineapple juice')), ING('0.25','oz',ST('grenadine')), ING('0.25','oz',T('liqueur','maraschino'))]),
+    R('r46',"Planter's Punch",'shake','highball','orange + cherry','One of sour, two of sweet, three of strong, four of weak.',[
+      ING('1.5','oz',T('rum','dark')), ING('1.25','oz',T('mixer','orange juice')), ING('1.25','oz',T('mixer','pineapple juice')), ING('0.75','oz',ST('lemon')), ING('0.33','oz',ST('grenadine')), ING('0.33','oz',ST('simple syrup')), ING('3','dash',T('bitters','aromatic'))]),
+    R('r47','Sidecar','shake','coupe','orange twist','Sugar the rim if you like it 1920s-style.',[
+      ING('1.75','oz',T('brandy','cognac')), ING('0.75','oz',T('liqueur','orange')), ING('0.75','oz',ST('lemon'))]),
+    R('r48','Tuxedo','stir','coupe','lemon twist + cherry','A Martini in white tie.',[
+      ING('1','oz',T('gin')), ING('1','oz',T('vermouth','dry')), ING('0.5','bsp',T('liqueur','maraschino')), ING('0.25','bsp',T('liqueur','absinthe')), ING('3','dash',T('bitters','orange'))]),
+    R('r49','Vieux Carré','stir','rocks','orange twist + cherry','New Orleans, Hotel Monteleone, 1938.',[
+      ING('1','oz',T('whiskey','rye')), ING('1','oz',T('brandy','cognac')), ING('1','oz',T('vermouth','sweet')), ING('1','bsp',T('liqueur','benedictine')), ING('2','dash',T('bitters','peychauds')), ING('2','dash',T('bitters','aromatic'))]),
+    R('r50','White Lady','shake','coupe','','Harry MacElhone’s gin Sidecar.',[
+      ING('1.33','oz',T('gin')), ING('1','oz',T('liqueur','orange')), ING('0.75','oz',ST('lemon'))]),
+    // ---- IBA expansion: Contemporary Classics (r51–r68) ----
+    R('r51','Black Russian','build','rocks','','Add cream and it’s a White Russian.',[
+      ING('1.75','oz',T('vodka')), ING('0.75','oz',T('liqueur','coffee'))]),
+    R('r52','Bloody Mary','build','highball','celery + lemon wedge','Season with Worcestershire, Tabasco, salt, and pepper. Roll it, don’t shake.',[
+      ING('1.5','oz',T('vodka')), ING('3','oz',T('mixer','tomato juice')), ING('0.5','oz',ST('lemon'))]),
+    R('r53','Caipirinha','build','rocks','lime wheel','Muddle the lime wedges and sugar first, then cachaça and crushed ice.',[
+      ING('2','oz',T('rum','cachaca')), ING('0.75','oz',ST('lime'),'half a lime, in muddled wedges'), ING('4','tsp',ST('sugar'))]),
+    R('r54','Champagne Cocktail','build','flute','orange slice + cherry','Soak the sugar cube in the bitters, then drop it in.',[
+      ING('3','oz',T('wine','sparkling')), ING('0.33','oz',T('brandy','cognac')), ING('1','tsp',ST('sugar'),'a cube, bitters-soaked'), ING('2','dash',T('bitters','aromatic'))]),
+    R('r55','Corpse Reviver No. 2','shake','coupe','orange twist','Classically Lillet Blanc — blanc vermouth stands in fine.',[
+      ING('1','oz',T('gin')), ING('1','oz',T('liqueur','orange')), ING('1','oz',T('vermouth','blanc')), ING('1','oz',ST('lemon')), ING('1','rinse',T('liqueur','absinthe'))]),
+    R('r56','Cosmopolitan','shake','martini','lime wheel','Citron vodka in the 90s spec.',[
+      ING('1.33','oz',T('vodka')), ING('0.5','oz',T('liqueur','orange')), ING('0.5','oz',ST('lime')), ING('1','oz',T('mixer','cranberry juice'))]),
+    R('r57','Cuba Libre','build','highball','lime wedge','A rum and coke that means it — fresh lime, lots of ice.',[
+      ING('1.75','oz',T('rum','white')), ING('4','oz',T('mixer','cola')), ING('0.33','oz',ST('lime'))]),
+    R('r58','French Connection','build','rocks','','Cognac and amaretto over one big cube.',[
+      ING('1.25','oz',T('brandy','cognac')), ING('1.25','oz',T('liqueur','amaretto'))]),
+    R('r59','Godfather','build','rocks','','Blended scotch is traditional; a peaty one is a plot twist.',[
+      ING('1.25','oz',T('whiskey','scotch')), ING('1.25','oz',T('liqueur','amaretto'))]),
+    R('r60','Long Island Iced Tea','build','highball','lemon slice','Everything, somehow, in balance.',[
+      ING('0.5','oz',T('vodka')), ING('0.5','oz',T('gin')), ING('0.5','oz',T('rum','white')), ING('0.5','oz',T('tequila')), ING('0.5','oz',T('liqueur','orange')), ING('0.75','oz',ST('lemon')), ING('1','oz',ST('simple syrup')), ING('2','oz',T('mixer','cola'))]),
+    R('r61','Mimosa','build','flute','','Juice first — less foam-over.',[
+      ING('2.5','oz',T('wine','sparkling')), ING('2.5','oz',T('mixer','orange juice'))]),
+    R('r62','Mint Julep','build','julep cup','mint bouquet','Crushed ice, frosted cup, Derby day.',[
+      ING('2','oz',T('whiskey','bourbon')), ING('8','leaf',ST('mint')), ING('1','tsp',ST('sugar'))]),
+    R('r63','Moscow Mule','build','copper mug','lime wedge','Born in 1941 to sell vodka and copper mugs. It worked.',[
+      ING('1.5','oz',T('vodka')), ING('4','oz',T('mixer','ginger beer')), ING('0.33','oz',ST('lime'))]),
+    R('r64','Pisco Sour','shake','coupe','three drops of bitters on the foam','Dry-shake, then swirl the bitters through the head.',[
+      ING('1.5','oz',T('brandy','pisco')), ING('1','oz',ST('lime')), ING('0.75','oz',ST('simple syrup')), ING('1','whole',ST('egg white')), ING('3','drop',T('bitters','aromatic'))]),
+    R('r65','Sea Breeze','build','highball','lime wedge','Cranberry first — the grapefruit floats a sunset.',[
+      ING('1.33','oz',T('vodka')), ING('4','oz',T('mixer','cranberry juice')), ING('1','oz',T('mixer','grapefruit juice'))]),
+    R('r66','Singapore Sling','shake','highball','pineapple + cherry','Raffles Hotel, 1915 — every ingredient earns its seat.',[
+      ING('1','oz',T('gin')), ING('0.5','oz',T('liqueur','cherry')), ING('0.25','oz',T('liqueur','orange')), ING('0.25','oz',T('liqueur','benedictine')), ING('4','oz',T('mixer','pineapple juice')), ING('0.5','oz',ST('lime')), ING('0.33','oz',ST('grenadine')), ING('1','dash',T('bitters','aromatic'))]),
+    R('r67','Tequila Sunrise','build','highball','orange slice + cherry','Pour the grenadine last — it sinks and makes the sunrise.',[
+      ING('1.5','oz',T('tequila')), ING('3','oz',T('mixer','orange juice')), ING('0.5','oz',ST('grenadine'),'poured last, it sinks')]),
+    R('r68','Vesper','shake','coupe','lemon twist','Bond’s order: shaken until ice-cold. Lillet Blanc, classically.',[
+      ING('1.5','oz',T('gin')), ING('0.5','oz',T('vodka')), ING('0.25','oz',T('vermouth','blanc'))]),
+    // ---- IBA expansion: New Era Drinks (r69–r81) ----
+    R('r69',"Bee's Knees",'shake','coupe','lemon twist','Honey syrup: 3 parts honey, 1 part hot water.',[
+      ING('1.75','oz',T('gin')), ING('0.75','oz',ST('honey')), ING('0.75','oz',ST('lemon'))]),
+    R('r70','Canchánchara','build','rocks','lime wheel','Cuba’s oldest — dissolve the honey and lime first, then rum.',[
+      ING('1.75','oz',T('rum')), ING('0.75','oz',ST('honey')), ING('0.5','oz',ST('lime'))]),
+    R('r71','Fernandito','build','highball','','Argentina’s national highball. Fernet first, cola foam high.',[
+      ING('1.75','oz',T('amaro','fernet')), ING('4','oz',T('mixer','cola'))]),
+    R('r72','Garibaldi','build','highball','orange wedge','Whip the orange juice frothy — “fluffy” is the whole point.',[
+      ING('1.5','oz',T('amaro','campari')), ING('4','oz',T('mixer','orange juice'))]),
+    R('r73','Illegal','shake','coupe','','Smoky, funky, a little outlaw.',[
+      ING('1','oz',T('mezcal')), ING('0.5','oz',T('rum','overproof')), ING('0.5','oz',T('liqueur','falernum')), ING('0.25','oz',T('liqueur','maraschino')), ING('0.75','oz',ST('lime')), ING('0.5','oz',ST('simple syrup')), ING('1','whole',ST('egg white'),'optional')]),
+    R('r74','Lemon Drop','shake','martini','sugar rim + lemon twist','Citron vodka if you have it.',[
+      ING('1.5','oz',T('vodka')), ING('0.75','oz',T('liqueur','orange')), ING('0.75','oz',ST('lemon')), ING('1','tsp',ST('simple syrup'))]),
+    R('r75','Milano-Torino','build','rocks','orange slice','Campari from Milano, vermouth from Torino — the Americano minus soda.',[
+      ING('1.5','oz',T('amaro','campari')), ING('1.5','oz',T('vermouth','sweet'))]),
+    R('r76','New York Sour','shake','rocks','the wine is the garnish','A whiskey sour under a dry red blanket.',[
+      ING('2','oz',T('whiskey','bourbon')), ING('0.75','oz',ST('lemon')), ING('0.75','oz',ST('simple syrup')), ING('0.5','oz',T('wine','red'),'float'), ING('1','whole',ST('egg white'),'optional')]),
+    R('r77','Old Cuban','shake','coupe','mint leaf','A Mojito that dressed up — shake, strain, crown with bubbles.',[
+      ING('1.5','oz',T('rum','aged')), ING('0.75','oz',ST('lime')), ING('1','oz',ST('simple syrup')), ING('6','leaf',ST('mint')), ING('2','dash',T('bitters','aromatic')), ING('2','oz',T('wine','sparkling'))]),
+    R('r78','Southside','shake','coupe','mint leaf','The gin gang’s Mojito — some say Capone’s crew drank it.',[
+      ING('2','oz',T('gin')), ING('1','oz',ST('lime')), ING('0.5','oz',ST('simple syrup')), ING('6','leaf',ST('mint'))]),
+    R('r79','Suffering Bastard','build','highball','mint sprig + orange','Cairo, 1942 — a hangover cure that starts the next one.',[
+      ING('1','oz',T('gin')), ING('1','oz',T('brandy')), ING('0.5','oz',ST('lime')), ING('2','dash',T('bitters','aromatic')), ING('4','oz',T('mixer','ginger beer'))]),
+    R('r80','Tipperary','stir','coupe','orange twist','Irish whiskey and Chartreuse, singing in harmony.',[
+      ING('1.75','oz',T('whiskey','irish')), ING('0.75','oz',T('vermouth','sweet')), ING('0.5','oz',T('liqueur','green chartreuse')), ING('2','dash',T('bitters','aromatic'))]),
+    R('r81','Trinidad Sour','shake','coupe','','Yes: an ounce and a half of bitters. Trust it once.',[
+      ING('1.5','oz',T('bitters','aromatic')), ING('1','oz',T('mixer','orgeat')), ING('0.75','oz',ST('lemon')), ING('0.5','oz',T('whiskey','rye'))])
   ];
   for(const r of list){ const f = SEED_FLAVORS[r.id]; if(f) r.flavor = { x:f[0], y:f[1] }; }
   return list;
@@ -1061,9 +1175,11 @@ const PIGMENTS = [ // ['category' or 'category/subtype', [r,g,b], strength, flag
   ['liqueur/yellow chartreuse',[212,178,66],.8], ['liqueur/orange',[224,158,74],.5],
   ['liqueur/maraschino',[238,234,222],.15], ['liqueur/amaretto',[158,88,42],.7],
   ['liqueur/falernum',[228,206,148],.4], ['liqueur/absinthe',[152,188,118],.6],
-  ['liqueur/elderflower',[236,232,214],.15], ['liqueur',[210,180,120],.4],
+  ['liqueur/elderflower',[236,232,214],.15], ['liqueur/cacao',[62,38,26],.85],
+  ['liqueur/benedictine',[206,150,62],.5], ['liqueur/cherry',[142,26,44],.75],
+  ['liqueur',[210,180,120],.4],
   ['whiskey',[186,116,38],.7],
-  ['rum/white',[236,231,216],.08], ['rum/overproof',[160,100,40],.6], ['rum',[158,94,36],.65],
+  ['rum/white',[236,231,216],.08], ['rum/overproof',[160,100,40],.6], ['rum/cachaca',[238,234,222],.08], ['rum',[158,94,36],.65],
   ['brandy',[172,102,44],.7],
   ['tequila/reposado',[214,182,120],.35], ['tequila/anejo',[196,150,80],.5],
   ['tequila',[238,234,222],.08], ['mezcal',[238,234,222],.08],
@@ -1074,6 +1190,8 @@ const PIGMENTS = [ // ['category' or 'category/subtype', [r,g,b], strength, flag
   ['mixer/ginger beer',[222,190,118],.35], ['mixer/cola',[58,36,26],.8],
   ['mixer/grapefruit soda',[242,198,188],.3], ['mixer/pineapple juice',[236,200,88],.55],
   ['mixer/grapefruit juice',[238,188,158],.45], ['mixer/orgeat',[238,228,208],.5,'opaque'],
+  ['mixer/orange juice',[240,168,52],.6], ['mixer/cranberry juice',[196,30,58],.6],
+  ['mixer/tomato juice',[204,62,42],.9,'opaque'],
   ['mixer',[232,232,226],.15],
   ['milk',[246,243,236],.7,'opaque'], ['spice',[200,160,110],.2],
 ];
@@ -1083,6 +1201,7 @@ const STAPLE_PIGMENTS = {
   'agave syrup':[[226,198,134],.4], espresso:[[22,13,9],.95,'foam'],
   'egg white':[[242,240,234],.25,'opaque foam'], cream:[[248,246,240],.7,'opaque'],
   'coconut cream':[[247,244,236],.75,'opaque'], mint:[[150,190,130],.2], salt:[[240,240,240],.05],
+  grenadine:[[196,32,64],.6], 'raspberry syrup':[[186,42,86],.55],
 };
 function pigmentOf(req){ // -> { rgb, s, flag }
   if(!req) return { rgb:[235,230,215], s:.15, flag:'' };
@@ -1136,12 +1255,13 @@ const SG_K_SUGAR = 0.0040;   // SG per g sugar / 100ml (sucrose ≈ 0.0039)
 const SG_K_ABV = 0.0013;     // SG per ABV point (40% spirit ≈ 0.948, matches reality)
 const FLOAT_MARGIN = 0.008;  // lighter than the body by at least this, or it marbles
 const SUGAR_STAPLES = { 'simple syrup':50, sugar:50, honey:55, 'agave syrup':52, lime:1.5, lemon:1.5,
-  espresso:0, 'egg white':0, cream:3, 'coconut cream':12 };
+  espresso:0, 'egg white':0, cream:3, 'coconut cream':12, grenadine:50, 'raspberry syrup':50 };
 const SUGAR_TAGS = [ // same first-match convention as PIGMENTS, g sugar / 100ml
   ['liqueur/falernum',30], ['liqueur',25], ['amaro',18],
   ['vermouth/sweet',13], ['vermouth',3], ['wine/sparkling',1], ['wine',1], ['bitters',5],
   ['mixer/soda water',0], ['mixer/tonic',9], ['mixer/ginger beer',10], ['mixer/cola',11],
   ['mixer/grapefruit soda',10], ['mixer/pineapple juice',10], ['mixer/grapefruit juice',8],
+  ['mixer/orange juice',9], ['mixer/cranberry juice',13], ['mixer/tomato juice',4],
   ['mixer/orgeat',40], ['mixer',5], ['milk',5],
 ];
 function sugarOf(req){
@@ -3193,7 +3313,7 @@ function openSettings(){
     const missing = seedRecipes().filter(s => !S.recipes.some(r => r.id === s.id));
     for(const m of missing) S.recipes.push(m);
     if(missing.length){ save(); renderAll(); }
-    toast(missing.length ? 'Restored ' + missing.length + ' classic' + (missing.length === 1 ? '' : 's') + '.' : 'All 34 classics are present.');
+    toast(missing.length ? 'Restored ' + missing.length + ' classic' + (missing.length === 1 ? '' : 's') + '.' : 'All 81 classics are present.');
   };
   const newLink = document.getElementById('st-newlink');
   if(newLink) newLink.onclick = () => {

@@ -82,7 +82,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // --- boot ---
   assert(errors.length===0, 'no runtime errors on boot'+(errors.length?' -> '+errors.join(' | '):''));
-  assert(w.eval('S.recipes.length')===34, 'seeds 34 classic recipes');
+  assert(w.eval('S.recipes.length')===81, 'seeds 81 classic recipes');
   assert(w.eval('S.bottles.length')===0, 'shelf starts empty (no seed bottles)');
   assert(w.eval('S.staples.includes("lime") && S.staples.includes("coconut cream")'), 'default staples loaded');
   assert(!d.getElementById('empty-shelf').classList.contains('hidden'), 'empty-shelf invite shown on first run');
@@ -121,8 +121,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   w.eval('upsertBottle({name:"Angostura", category:"bitters", subtype:"aromatic", level:"full"})');
   const groups = JSON.parse(w.eval('JSON.stringify(unlockGroups())'));
   const sv = groups.find(g=>g.key==='tag:vermouth/sweet');
-  assert(!!sv && sv.recipes.length===3 && ['Manhattan','Negroni','Boulevardier'].every(n=>sv.recipes.includes(n)),
-    'sweet vermouth unlock groups Manhattan+Negroni+Boulevardier (3)');
+  assert(!!sv && sv.recipes.length===5 && ['Manhattan','Negroni','Boulevardier','Americano','Milano-Torino'].every(n=>sv.recipes.includes(n)),
+    'sweet vermouth unlock groups Manhattan+Negroni+Boulevardier+Americano+Milano-Torino (5)');
   assert(groups[0].key==='tag:vermouth/sweet', 'unlock groups sorted by count desc (sweet vermouth first)');
   assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Old Fashioned")).makeable')===true, 'Old Fashioned makeable with bourbon+bitters');
   assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Gimlet")).makeable')===true, 'Gimlet makeable with gin+staples');
@@ -216,7 +216,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   // --- recipe CRUD via UI form ---
   w.eval('setTab("specs")');
   const specCount = d.querySelectorAll('#spec-list .rcard').length;
-  assert(specCount===34, 'specs tab renders all 34 recipe cards');
+  assert(specCount===81, 'specs tab renders all 81 recipe cards');
   d.getElementById('btn-addrecipe').click(); await sleep(30);
   d.getElementById('rf-name').value = 'House Coquito';
   const ir = d.querySelector('#rf-ings .ingrow');
@@ -228,13 +228,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('rf-house').checked = true;
   d.getElementById('rf-servings').value = '2';
   d.getElementById('rf-save').click(); await sleep(30);
-  assert(w.eval('S.recipes.length')===35 && w.eval('S.recipes.some(r=>r.name==="House Coquito" && r.house===true)'), 'recipe form saves a new house recipe');
+  assert(w.eval('S.recipes.length')===82 && w.eval('S.recipes.some(r=>r.name==="House Coquito" && r.house===true)'), 'recipe form saves a new house recipe');
   assert(w.eval('S.recipes.find(r=>r.name==="House Coquito").servings')===2, 'the makes-N-drinks field saves');
   assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="House Coquito")).makeable')===true, 'staple-only recipe is immediately makeable');
   const coqId = w.eval('S.recipes.find(r=>r.name==="House Coquito").id');
   w.eval('openRecipeDetail("'+coqId+'")'); await sleep(20);
   d.getElementById('rd-del').click(); await sleep(30);
-  assert(w.eval('S.recipes.length')===34, 'recipe delete removes it');
+  assert(w.eval('S.recipes.length')===81, 'recipe delete removes it');
 
   // --- restore missing classics ---
   w.eval('S.recipes.find(r=>r.id==="r01").name = "Old Fashioned (CJ cut)"; save();');
@@ -245,14 +245,48 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('S.recipes.some(r=>r.id==="r17" && r.name==="Mai Tai")'), 'restore-missing-classics brings back only the absent id');
   assert(w.eval('S.recipes.find(r=>r.id==="r01").name')==='Old Fashioned (CJ cut)', 'an edited seed recipe is never overwritten');
   d.getElementById('st-classics').click(); await sleep(20);
-  assert(w.eval('S.recipes.length')===34, 'a second run adds nothing');
+  assert(w.eval('S.recipes.length')===81, 'a second run adds nothing');
   w.eval('closeModal(); S.recipes.find(r=>r.id==="r01").name="Old Fashioned"; save();'); await sleep(20);
+
+  // --- IBA expansion: an old install picks up the new seeds via the same restore flow ---
+  w.eval('S.recipes = S.recipes.filter(r=>!["r53","r72","r81"].includes(r.id)); save();'); // an install from before the expansion
+  assert(w.eval('S.recipes.length')===78, 'the pre-expansion install is missing the new drinks');
+  w.eval('openSettings()'); await sleep(20);
+  d.getElementById('st-classics').click(); await sleep(20);
+  assert(w.eval('S.recipes.length')===81 && ['Caipirinha','Garibaldi','Trinidad Sour'].every(n=>w.eval('S.recipes.some(r=>r.name==='+JSON.stringify(n)+')')),
+    'restore-missing-classics carries the IBA expansion to an old install');
+  w.eval('closeModal()'); await sleep(20);
+
+  // --- IBA expansion: every seed has hand-placed flavor coordinates ---
+  assert(w.eval('seedRecipes().every(r=>r.flavor && isFinite(r.flavor.x) && isFinite(r.flavor.y))'), 'every seeded classic carries flavor-galaxy coordinates');
+  assert(w.eval('Object.keys(SEED_FLAVORS).length')===81, 'SEED_FLAVORS covers all 81 seeds');
+
+  // --- IBA expansion: new recipes become makeable with the right bottles ---
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Caipirinha")).makeable')===false, 'Caipirinha waits on cachaça');
+  w.eval('upsertBottle({name:"Novo Fogo", category:"rum", subtype:"cachaca", level:"full"})');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Caipirinha")).makeable')===true, 'a cachaça bottle makes the Caipirinha (lime + sugar are staples)');
+  w.eval('upsertBottle({name:"Carpano Antica", category:"vermouth", subtype:"sweet", level:"full"})');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Americano")).makeable')===true, 'Americano makeable with Campari + sweet vermouth (soda never gates)');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Milano-Torino")).makeable')===true, 'Milano-Torino makeable with the same two bottles');
+  assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Trinidad Sour")).makeable')===true, 'Trinidad Sour makeable off bitters + rye (orgeat never gates)');
+  w.eval('S.bottles = S.bottles.filter(b=>!["Novo Fogo","Carpano Antica"].includes(b.name)); save(); renderAll();'); // leave the shelf as the later tests expect
+
+  // --- IBA expansion: the derived systems produce sane output for the new seeds ---
+  const cSunrise = JSON.parse(w.eval('JSON.stringify(colorOf(S.recipes.find(r=>r.id==="r67")))'));
+  assert(cSunrise.r>cSunrise.g && cSunrise.g>cSunrise.b, 'Tequila Sunrise renders warm (r>g>b)');
+  assert(JSON.parse(w.eval('JSON.stringify(colorOf(S.recipes.find(r=>r.id==="r52")))')).opacity>=.9, 'Bloody Mary goes opaque (tomato juice)');
+  const nySteps = JSON.parse(w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r76")))'));
+  assert(nySteps.some(s=>/Float the red wine/.test(s) && /holds/.test(s)), 'New York Sour steps float the red wine — and the physics says it holds');
+  const caiSteps = JSON.parse(w.eval('JSON.stringify(stepsFor(S.recipes.find(r=>r.id==="r53")))'));
+  assert(caiSteps.length>0 && caiSteps.some(s=>/cachaça/.test(s)), 'Caipirinha build steps pour the cachaça');
+  assert(w.eval('glassFor(S.recipes.find(r=>r.id==="r63").glass).key')==='rocks', 'a copper mug lands on a sane glass shape');
+  assert(w.eval('tagLabel({category:"rum",subtype:"cachaca"})')==='cachaça' && w.eval('tagLabel({category:"brandy",subtype:"cognac"})')==='cognac', 'new tags read cleanly');
 
   // --- specs search: by name and by ingredient (reverse lookup) ---
   d.getElementById('spec-search').value = 'campari';
   d.getElementById('spec-search').dispatchEvent(new w.Event('input')); await sleep(20);
   const found = [...d.querySelectorAll('#spec-list .rname')].map(e=>e.textContent);
-  assert(found.length===3 && ['Negroni','Boulevardier','Jungle Bird'].every(n=>found.some(f=>f.includes(n))),
+  assert(found.length===6 && ['Negroni','Boulevardier','Jungle Bird','Americano','Garibaldi','Milano-Torino'].every(n=>found.some(f=>f.includes(n))),
     'searching an ingredient finds every drink that uses it');
   d.getElementById('spec-search').value = 'daiq';
   d.getElementById('spec-search').dispatchEvent(new w.Event('input')); await sleep(20);
@@ -263,7 +297,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   // --- specs filters ---
   const ginChip = [...d.querySelectorAll('#spec-filters .chip')].find(c=>c.dataset.f==='gin');
   ginChip.click(); await sleep(20);
-  assert([...d.querySelectorAll('#spec-list .rname')].every(el=>{const n=el.textContent;return ['Negroni','Martini','Gimlet','Last Word','Tom Collins','French 75'].some(x=>n.includes(x));}), 'base-spirit chip filters to gin drinks');
+  assert([...d.querySelectorAll('#spec-list .rname')].every(el=>{const n=el.textContent;return ['Negroni','Martini','Gimlet','Last Word','Tom Collins','French 75','Aviation','Casino','Clover Club','Gin Fizz','Hanky Panky','Martinez','Tuxedo','White Lady','Corpse Reviver','Vesper',"Bee's Knees",'Southside','Suffering Bastard','Singapore Sling'].some(x=>n.includes(x));}), 'base-spirit chip filters to gin drinks');
   const mkChip = [...d.querySelectorAll('#spec-filters .chip')].find(c=>c.dataset.f==='__mk');
   mkChip.click(); await sleep(20);
   const mkDots = [...d.querySelectorAll('#spec-list .rcard .mdot')];
@@ -1340,10 +1374,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const persisted = w.eval('JSON.parse(localStorage.getItem("bar-v1")||"null")');
   assert(persisted && persisted.v===1 && persisted.bottles.length===w.eval('S.bottles.length'), 'state persists to localStorage under bar-v1');
   w.eval('localStorage.setItem("bar-v1", JSON.stringify({v:99, alien:true}))');
-  assert(w.eval('load().recipes.length')===34 && w.eval('load().bottles.length')===0, 'unknown schema version -> clean fresh state');
+  assert(w.eval('load().recipes.length')===81 && w.eval('load().bottles.length')===0, 'unknown schema version -> clean fresh state');
   assert(w.eval('!!localStorage.getItem("bar-v1-backup")'), 'migration guard keeps a backup of the unknown blob');
   w.eval('localStorage.setItem("bar-v1", "corrupted{{{")');
-  assert(w.eval('load().recipes.length')===34, 'corrupted storage -> clean fresh state, no crash');
+  assert(w.eval('load().recipes.length')===81, 'corrupted storage -> clean fresh state, no crash');
 
   assert(errors.length===0, 'no runtime errors across the whole run'+(errors.length?' -> '+errors.join(' | '):''));
   console.log(process.exitCode ? '\nSOME TESTS FAILED' : '\nall green');
