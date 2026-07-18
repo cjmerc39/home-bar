@@ -86,13 +86,15 @@ const SCAN_SCHEMA = {
           name: { type: 'string' },
           category: { type: 'string', enum: CATEGORIES },
           subtype: { type: 'string' },
-          box: { // optional: normalized 0..1 bounding box, tight around the bottle
+          box: { // optional: normalized 0..1 bounding box, tight around the bottle.
+            // NO minimum/maximum here: the API's structured-output validator rejects
+            // numeric range constraints outright — the app range-checks boxes itself.
             type: 'object',
             properties: {
-              x: { type: 'number', minimum: 0, maximum: 1 },
-              y: { type: 'number', minimum: 0, maximum: 1 },
-              w: { type: 'number', minimum: 0, maximum: 1 },
-              h: { type: 'number', minimum: 0, maximum: 1 },
+              x: { type: 'number' },
+              y: { type: 'number' },
+              w: { type: 'number' },
+              h: { type: 'number' },
             },
             required: ['x', 'y', 'w', 'h'],
             additionalProperties: false,

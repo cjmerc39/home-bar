@@ -1736,7 +1736,11 @@ async function handleScanFile(file){
     if(!bottles.length){ closeModal(); toast('No bottles spotted — try a closer, brighter photo.'); return; }
     openConfirmSheet(bottles, payload.dataUrl);
   }catch(e){
-    closeModal(); toast('Scan failed — check your connection and try again.');
+    closeModal();
+    // a worker-reported error names the real problem — blame the connection only
+    // when the request itself never got through (fetch throws TypeError)
+    const server = e && e.message && !(e instanceof TypeError) && !/^scan failed: \d+$/.test(e.message);
+    toast(server ? 'Scan failed — ' + e.message.slice(0, 140) : 'Scan failed — check your connection and try again.');
   }
 }
 // the AI's boxes are best-effort (clipped necks, a neighbor's shoulder) — the
