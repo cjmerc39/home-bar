@@ -521,6 +521,51 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert(w.eval('S.bottles.filter(b=>b.name==="Campari Bitter").length')===1, 'duplicate row stayed unchecked — no double bottle');
   assert(w.eval('recipeStatus(S.recipes.find(r=>r.name==="Negroni")).makeable')===true, 'scanned vermouth completes the Negroni');
 
+  // --- wishlist scan: the same /scan endpoint pointed at a store shelf ---
+  // single bottle -> the wish form opens prefilled (name + type note + photo)
+  w.__scanResult = { bottles: [ { name:'Chartreuse Jaune', category:'liqueur', subtype:'yellow chartreuse' } ] };
+  const wscan1 = await w.requestScan('image/jpeg','aGVsbG8=');
+  w.wishScanRoute(wscan1, null, 'data:image/jpeg;base64,dGh1bWI='); await sleep(30);
+  assert(d.getElementById('wf-name').value==='Chartreuse Jaune', 'WSCAN: single-bottle scan prefills the wish form name');
+  assert(d.getElementById('wf-notes').value==='yellow chartreuse liqueur', 'WSCAN: prefilled notes carry subtype + category');
+  assert(d.querySelector('#wf-photo img')!==null, 'WSCAN: the photo rides into the wish form');
+  const _wB = w.eval('S.wishlist.length');
+  d.getElementById('wf-save').click(); await sleep(30);
+  assert(w.eval('S.wishlist.length')===_wB+1 && w.eval('S.wishlist.some(x=>x.name==="Chartreuse Jaune" && !!x.img)'),
+    'WSCAN: saving adds the scanned wish with its photo');
+  // single bottle already on the shelf -> heads-up toast, form still opens
+  w.__scanResult = { bottles: [ { name:'Campari Bitter', category:'amaro', subtype:'campari' } ] };
+  w.wishScanRoute(await w.requestScan('image/jpeg','aGVsbG8='), null, null); await sleep(30);
+  assert(/already on your shelf/.test(d.getElementById('toast').textContent), 'WSCAN: scanning an owned bottle warns');
+  assert(d.getElementById('wf-name').value==='Campari Bitter', 'WSCAN: ...but still offers the form');
+  w.eval('closeModal()');
+  // several bottles -> pick sheet; shelf + wishlist dups flagged and default-unchecked
+  w.__scanResult = { bottles: [
+    { name:'Campari Bitter', category:'amaro', subtype:'campari' },        // on the shelf
+    { name:'Chartreuse Jaune', category:'liqueur' },                       // just wished above
+    { name:'Amaro Nardini', category:'amaro', subtype:'nardini' },
+  ]};
+  w.openWishScanSheet(await w.requestScan('image/jpeg','aGVsbG8='), null, null); await sleep(30);
+  assert(d.querySelectorAll('#modal .wishscanrow').length===3, 'WSCAN: pick sheet shows one row per detected bottle');
+  const _wsRows = [...d.querySelectorAll('#modal .wishscanrow')];
+  const _wsShelf = _wsRows.find(r=>r.querySelector('.sr-name').value==='Campari Bitter');
+  assert(/already on the shelf/.test(_wsShelf.querySelector('.dup').textContent) && _wsShelf.querySelector('.sr-ck').checked===false,
+    'WSCAN: an owned bottle is flagged and default-unchecked');
+  const _wsWish = _wsRows.find(r=>r.querySelector('.sr-name').value==='Chartreuse Jaune');
+  assert(/already on the wishlist/.test(_wsWish.querySelector('.dup').textContent) && _wsWish.querySelector('.sr-ck').checked===false,
+    'WSCAN: an already-wished bottle is flagged and default-unchecked');
+  assert(d.getElementById('ws-commit').textContent==='Add 1 to the wishlist', 'WSCAN: commit button counts checked rows');
+  const _wB2 = w.eval('S.wishlist.length');
+  d.getElementById('ws-commit').click(); await sleep(30);
+  assert(w.eval('S.wishlist.length')===_wB2+1 && w.eval('S.wishlist.some(x=>x.name==="Amaro Nardini" && x.notes==="nardini amaro")'),
+    'WSCAN: commit adds only the checked row, typed by the scan');
+  // no SCAN_URL -> the wishlist scan button hides with the shelf one
+  w.eval('CFG.scanUrl=""; renderShelf();');
+  assert(d.getElementById('btn-wishscan').classList.contains('hidden'), 'WSCAN: no SCAN_URL -> wishlist scan button hidden');
+  w.eval('CFG.scanUrl=SCAN_URL; renderShelf();');
+  assert(!d.getElementById('btn-wishscan').classList.contains('hidden'), 'WSCAN: restoring SCAN_URL brings it back');
+  w.eval('S.wishlist=[]; save(); renderAll();');   // leave the wishlist as the later tests expect it
+
   // --- AI recipe draft: mocked fetch -> prefilled form -> save ---
   w.eval('setTab("specs")');
   d.getElementById('btn-addrecipe').click(); await sleep(30);

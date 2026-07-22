@@ -409,7 +409,10 @@ body.menuMode #modal .cc-card{border-color:var(--m-rule)}
     </div>
     <h2 class="htitle">Wishlist</h2>
     <div id="wish-list"></div>
-    <button class="abtn ghost" id="btn-addwish" style="width:100%;margin-top:6px">+ Add to wishlist</button>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="abtn ghost" id="btn-addwish" style="flex:1">+ Add to wishlist</button>
+      <button class="abtn ghost" id="btn-wishscan" style="flex:1">&#128247; Scan a bottle</button>
+    </div>
   </section>
 
   <section id="view-specs" class="view">
@@ -460,6 +463,7 @@ body.menuMode #modal .cc-card{border-color:var(--m-rule)}
 <input type="file" id="scan-file" accept="image/*" class="hidden">
 <input type="file" id="recipe-file" accept="image/*" class="hidden">
 <input type="file" id="wish-file" accept="image/*" class="hidden">
+<input type="file" id="wishscan-file" accept="image/*" class="hidden">
 <input type="file" id="import-file" accept="application/json,.json" class="hidden">
 
 <script>
@@ -1516,8 +1520,9 @@ function upsertWish(wi){
 }
 function deleteWish(id){ S.wishlist = S.wishlist.filter(x => x.id !== id); save(); renderAll(); }
 let _wishFileCb = null;
-function openWishForm(id){
-  const wi = id ? S.wishlist.find(x => x.id === id) : { name:'', notes:'', img:null };
+function openWishForm(id, pre){ // pre: {name, notes, img} seeds a NEW wish (the scan flow)
+  const wi = id ? S.wishlist.find(x => x.id === id)
+    : { name: (pre && pre.name) || '', notes: (pre && pre.notes) || '', img: (pre && pre.img) || null };
   if(!wi) return;
   let img = wi.img || null;
   openModal('<button class="mclose" onclick="closeModal()">&times;</button><h2>' + (id?'Edit wish':'Add to wishlist') + '</h2>' +
@@ -1545,6 +1550,89 @@ function openWishForm(id){
   };
   const del = document.getElementById('wf-del');
   if(del) del.onclick = () => { if(confirm('Remove this wish?')){ deleteWish(id); closeModal(); } };
+}
+/* wishlist scan: the shelf scanner pointed at a store shelf — the identical /scan
+   request (no worker change). One bottle prefills the wish form; several open a
+   pick sheet. Photos stored at wish size (512px), crops at 256px. */
+async function handleWishScanFile(file){
+  openModal('<h2>Reading the label&hellip;</h2><div class="small mut">The AI is squinting at the bottle. ~15 seconds.</div><div class="spin"></div>');
+  try{
+    const [payload, wishP] = await Promise.all([fileToScanPayload(file), downscaleFile(file, 512, 0.75)]);
+    const bottles = await requestScan(payload.media_type, payload.data);
+    if(!bottles.length){ closeModal(); toast('No bottle spotted — try a closer, brighter photo.'); return; }
+    wishScanRoute(bottles, payload.dataUrl, wishP.dataUrl);
+  }catch(e){
+    closeModal();
+    const server = e && e.message && !(e instanceof TypeError) && !/^scan failed: \d+$/.test(e.message);
+    toast(server ? 'Scan failed — ' + e.message.slice(0, 140) : 'Scan failed — check your connection and try again.');
+  }
+}
+function wishCatLabel(b){
+  const cat = CATEGORIES.includes(norm(b.category)) ? norm(b.category) : '';
+  const sub = norm(b.subtype || '');
+  return [sub, cat === 'other' ? '' : cat].filter(Boolean).join(' ');
+}
+function wishScanRoute(bottles, photoUrl, wishImg){
+  if(bottles.length === 1){
+    const b = bottles[0];
+    if(S.bottles.some(x => norm(x.name) === norm(b.name))) toast('Heads up — that one’s already on your shelf.');
+    openWishForm(null, { name: b.name || '', notes: wishCatLabel(b), img: wishImg || null });
+    return;
+  }
+  openWishScanSheet(bottles, photoUrl, wishImg);
+}
+function openWishScanSheet(bottles, photoUrl, wishImg){
+  const rows = bottles.map((b, i) => {
+    const onShelf = S.bottles.some(x => norm(x.name) === norm(b.name));
+    const wished = S.wishlist.some(x => norm(x.name) === norm(b.name));
+    return { name: b.name || 'Mystery bottle', label: wishCatLabel(b), onShelf, wished,
+      checked: !(onShelf || wished), box: validBox(b.box) ? b.box : null, img: null, i };
+  });
+  const html = ['<button class="mclose" onclick="closeModal()">&times;</button><h2>Add to the wishlist</h2>',
+    '<div class="small mut" style="margin-bottom:10px">Untick anything you don&rsquo;t want to hunt, or fix a name before adding.</div>'];
+  for(const r of rows){
+    html.push('<div class="scanrow wishscanrow" data-i="', r.i, '">',
+      '<input type="checkbox" class="sr-ck"', r.checked ? ' checked' : '', '>',
+      photoUrl && r.box ? '<span class="scanthumb ph" data-th="' + r.i + '"></span>' : '',
+      '<div class="grow">',
+        '<input class="sr-name" value="', esc(r.name), '" style="margin-bottom:3px">',
+        r.label ? '<div class="small dim">' + esc(r.label) + '</div>' : '',
+        r.onShelf ? '<div class="dup">already on the shelf</div>' : (r.wished ? '<div class="dup">already on the wishlist</div>' : ''),
+      '</div></div>');
+  }
+  html.push('<button class="abtn" id="ws-commit" style="width:100%;margin-top:8px"></button>');
+  openModal(html.join(''));
+  const wrap = document.getElementById('modal');
+  if(photoUrl) for(const r of rows){
+    if(!r.box) continue;
+    cropThumb(photoUrl, r.box, 256).then(t => {
+      if(!t) return;
+      r.img = t;
+      const ph = wrap.querySelector('.wishscanrow [data-th="' + r.i + '"]');
+      if(ph) ph.outerHTML = '<img class="scanthumb" data-th="' + r.i + '" src="' + esc(t) + '">';
+    });
+  }
+  const update = () => {
+    const n = wrap.querySelectorAll('.sr-ck:checked').length;
+    const btn = document.getElementById('ws-commit');
+    btn.textContent = n ? ('Add ' + n + ' to the wishlist') : 'Nothing selected';
+    btn.disabled = !n;
+  };
+  wrap.querySelectorAll('.sr-ck').forEach(ck => ck.addEventListener('change', update));
+  update();
+  document.getElementById('ws-commit').onclick = () => {
+    let added = 0;
+    wrap.querySelectorAll('.wishscanrow').forEach(row => {
+      if(!row.querySelector('.sr-ck').checked) return;
+      const src = rows.find(x => x.i === +row.dataset.i);
+      // each wish gets ITS bottle's crop when the AI boxed it; the whole photo otherwise
+      const id = upsertWish({ name: row.querySelector('.sr-name').value,
+        notes: (src && src.label) || '', img: (src && src.img) || wishImg || null });
+      if(id) added++;
+    });
+    closeModal();
+    toast(added ? ('Added ' + added + ' to the wishlist.') : 'Nothing added.');
+  };
 }
 
 /* ============================== export / import ============================== */
@@ -1749,7 +1837,7 @@ function validBox(b){
   return !!b && ['x','y','w','h'].every(k => typeof b[k] === 'number' && isFinite(b[k]))
     && b.x >= 0 && b.y >= 0 && b.w > 0 && b.h > 0 && b.x + b.w <= 1.001 && b.y + b.h <= 1.001;
 }
-function cropThumb(dataUrl, box){ // -> ~64px JPEG dataUrl, or null wherever canvas/Image can't
+function cropThumb(dataUrl, box, px){ // -> ~64px JPEG dataUrl (px overrides), or null wherever canvas/Image can't
   return new Promise(resolve => {
     try{
       const img = new Image();
@@ -1759,7 +1847,7 @@ function cropThumb(dataUrl, box){ // -> ~64px JPEG dataUrl, or null wherever can
         try{
           const sx = box.x*img.width, sy = box.y*img.height;
           const sw = Math.max(1, box.w*img.width), sh = Math.max(1, box.h*img.height);
-          const scale = 64 / Math.max(sw, sh);
+          const scale = (px || 64) / Math.max(sw, sh);
           const cv = document.createElement('canvas');
           cv.width = Math.max(1, Math.round(sw*scale)); cv.height = Math.max(1, Math.round(sh*scale));
           const cx = cv.getContext && cv.getContext('2d');
@@ -2498,6 +2586,8 @@ function renderTonight(){
   document.getElementById('shopping-list').innerHTML = shop.length ? '<div class="card">' + shop.join('') + '</div>' : '<div class="card dim">Nothing needed. Impressive shelf.</div>';
 }
 function renderWishlist(){
+  const sc = document.getElementById('btn-wishscan');
+  if(sc) sc.classList.toggle('hidden', !scanEnabled());   // same graceful degradation as the shelf scan
   const wishEl = document.getElementById('wish-list');
   wishEl.innerHTML = S.wishlist.length ? S.wishlist.map(x =>
     '<div class="card wish rowline" data-id="' + x.id + '">' +
@@ -3422,6 +3512,12 @@ document.getElementById('menu-tender').addEventListener('click', () => {
 document.getElementById('menu-reqs').addEventListener('click', openRequestInbox);
 document.getElementById('bt-ask').addEventListener('click', askBartender);
 document.getElementById('btn-addwish').addEventListener('click', () => openWishForm(null));
+document.getElementById('btn-wishscan').addEventListener('click', () => document.getElementById('wishscan-file').click());
+document.getElementById('wishscan-file').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(f) handleWishScanFile(f);
+});
 document.getElementById('wish-file').addEventListener('change', e => {
   const f = e.target.files && e.target.files[0];
   e.target.value = '';
