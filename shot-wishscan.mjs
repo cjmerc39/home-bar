@@ -60,6 +60,16 @@ await page.evaluate(ph => {
 await page.waitForTimeout(500);
 await page.screenshot({ path: OUT + '/w3-pick-sheet.png' });
 
+// the wishlist's second home: Tonight, under the Shopping list
+await page.evaluate(() => {
+  closeModal();
+  setTab('tonight');
+});
+await page.waitForTimeout(500);
+await page.evaluate(() => document.getElementById('wish-list-2').scrollIntoView({ block: 'center' }));
+await page.waitForTimeout(300);
+await page.screenshot({ path: OUT + '/w4-tonight.png' });
+
 await browser.close();
 server.close();
 console.log('shots written to ' + OUT);

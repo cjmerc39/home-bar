@@ -561,9 +561,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     'WSCAN: commit adds only the checked row, typed by the scan');
   // no SCAN_URL -> the wishlist scan button hides with the shelf one
   w.eval('CFG.scanUrl=""; renderShelf();');
-  assert(d.getElementById('btn-wishscan').classList.contains('hidden'), 'WSCAN: no SCAN_URL -> wishlist scan button hidden');
+  assert(d.getElementById('btn-wishscan').classList.contains('hidden') && d.getElementById('btn-wishscan-2').classList.contains('hidden'),
+    'WSCAN: no SCAN_URL -> both wishlist scan buttons hidden');
   w.eval('CFG.scanUrl=SCAN_URL; renderShelf();');
-  assert(!d.getElementById('btn-wishscan').classList.contains('hidden'), 'WSCAN: restoring SCAN_URL brings it back');
+  assert(!d.getElementById('btn-wishscan').classList.contains('hidden') && !d.getElementById('btn-wishscan-2').classList.contains('hidden'),
+    'WSCAN: restoring SCAN_URL brings them back');
   w.eval('S.wishlist=[]; save(); renderAll();');   // leave the wishlist as the later tests expect it
 
   // --- AI recipe draft: mocked fetch -> prefilled form -> save ---
@@ -648,9 +650,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('wf-notes').value = 'saw it at the shop downtown';
   d.getElementById('wf-save').click(); await sleep(30);
   assert(w.eval('S.wishlist.length')===1 && w.eval('S.wishlist[0].notes').includes('downtown'), 'wishlist add saves name + notes');
-  assert([...d.querySelectorAll('#wish-list .wname')].some(e=>e.textContent==='Chartreuse V.E.P.'), 'wish renders on Tonight');
+  assert([...d.querySelectorAll('#wish-list .wname')].some(e=>e.textContent==='Chartreuse V.E.P.'), 'wish renders on the Shelf tab');
+  // the wishlist's second home: Tonight, under the Shopping list
+  w.eval('setTab("tonight")'); await sleep(20);
+  assert(d.querySelector('#view-tonight #wish-list-2')!==null && [...d.querySelectorAll('#wish-list-2 .wname')].some(e=>e.textContent==='Chartreuse V.E.P.'),
+    'wish renders on Tonight too (under the Shopping list)');
+  assert(d.querySelector('#view-tonight #btn-addwish-2')!==null && d.querySelector('#view-tonight #btn-wishscan-2')!==null,
+    'Tonight carries its own add + scan buttons');
+  d.querySelector('#wish-list-2 .wish').click(); await sleep(20);
+  assert(d.getElementById('wf-name').value==='Chartreuse V.E.P.', 'tapping a wish on Tonight opens it for editing');
+  w.eval('closeModal(); setTab("shelf")'); await sleep(20);
   w.eval('S.wishlist[0].img="data:image/jpeg;base64,aGVsbG8="; save(); renderWishlist();'); await sleep(20);
-  assert(d.querySelector('#wish-list img.wthumb')!==null, 'wish photo renders as a thumbnail');
+  assert(d.querySelector('#wish-list img.wthumb')!==null && d.querySelector('#wish-list-2 img.wthumb')!==null, 'wish photo renders as a thumbnail in both homes');
   d.querySelector('#wish-list .wish').click(); await sleep(20);
   assert(d.getElementById('wf-name').value==='Chartreuse V.E.P.' && d.querySelector('#wf-photo img')!==null, 'tapping a wish opens it for editing with its photo');
   d.getElementById('wf-del').click(); await sleep(30);

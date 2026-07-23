@@ -439,6 +439,12 @@ body.menuMode #modal .cc-card{border-color:var(--m-rule)}
     <div id="unlock-list"></div>
     <h2 class="htitle">Shopping list</h2>
     <div id="shopping-list"></div>
+    <h2 class="htitle">Wishlist</h2>
+    <div id="wish-list-2"></div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="abtn ghost" id="btn-addwish-2" style="flex:1">+ Add to wishlist</button>
+      <button class="abtn ghost" id="btn-wishscan-2" style="flex:1">&#128247; Scan a bottle</button>
+    </div>
   </section>
 
   <section id="view-menu" class="view">
@@ -2584,18 +2590,26 @@ function renderTonight(){
   for(const b of S.bottles.filter(b => b.level === 'low')) shop.push('<div class="shopline"><span style="color:var(--low)">&#9679;</span><span>' + esc(b.name) + ' <span class="dim small">running low</span></span></div>');
   for(const b of S.bottles.filter(b => b.level === 'out')) shop.push('<div class="shopline"><span style="color:var(--out)">&#9679;</span><span>' + esc(b.name) + ' <span class="dim small">out</span></span></div>');
   document.getElementById('shopping-list').innerHTML = shop.length ? '<div class="card">' + shop.join('') + '</div>' : '<div class="card dim">Nothing needed. Impressive shelf.</div>';
+  renderWishlist();   // the wishlist rides the shopping context too
 }
+/* the wishlist lives in BOTH shopping moments: bottom of the Shelf (inventory)
+   and under Tonight's Shopping list (deciding what to buy) — one render, two homes */
 function renderWishlist(){
-  const sc = document.getElementById('btn-wishscan');
-  if(sc) sc.classList.toggle('hidden', !scanEnabled());   // same graceful degradation as the shelf scan
-  const wishEl = document.getElementById('wish-list');
-  wishEl.innerHTML = S.wishlist.length ? S.wishlist.map(x =>
+  for(const bid of ['btn-wishscan','btn-wishscan-2']){
+    const sc = document.getElementById(bid);
+    if(sc) sc.classList.toggle('hidden', !scanEnabled());   // same graceful degradation as the shelf scan
+  }
+  const items = S.wishlist.length ? S.wishlist.map(x =>
     '<div class="card wish rowline" data-id="' + x.id + '">' +
     (x.img ? '<img class="wthumb" src="' + esc(x.img) + '">' : '<div class="wph">&#127870;</div>') +
     '<div class="grow"><div class="wname">' + esc(x.name) + '</div>' +
     (x.notes ? '<div class="small mut">' + esc(x.notes) + '</div>' : '') + '</div></div>'
   ).join('') : '<div class="card dim">Bottles you’re hunting — snap the label so you remember it.</div>';
-  wishEl.querySelectorAll('.wish').forEach(el => el.addEventListener('click', () => openWishForm(el.dataset.id)));
+  for(const cid of ['wish-list','wish-list-2']){
+    const wishEl = document.getElementById(cid); if(!wishEl) continue;
+    wishEl.innerHTML = items;
+    wishEl.querySelectorAll('.wish').forEach(el => el.addEventListener('click', () => openWishForm(el.dataset.id)));
+  }
 }
 let sharedMenu = null; // payload from a shared link (read-only guest view)
 let bartenderMode = false; // host-only, per session: tap a menu drink to open its spec
@@ -3512,7 +3526,9 @@ document.getElementById('menu-tender').addEventListener('click', () => {
 document.getElementById('menu-reqs').addEventListener('click', openRequestInbox);
 document.getElementById('bt-ask').addEventListener('click', askBartender);
 document.getElementById('btn-addwish').addEventListener('click', () => openWishForm(null));
+document.getElementById('btn-addwish-2').addEventListener('click', () => openWishForm(null));
 document.getElementById('btn-wishscan').addEventListener('click', () => document.getElementById('wishscan-file').click());
+document.getElementById('btn-wishscan-2').addEventListener('click', () => document.getElementById('wishscan-file').click());
 document.getElementById('wishscan-file').addEventListener('change', e => {
   const f = e.target.files && e.target.files[0];
   e.target.value = '';
